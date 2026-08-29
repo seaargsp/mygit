@@ -13,12 +13,23 @@ async function build() {
     sourcemap: true,
   });
 
+  const webviewCtx = await esbuild.context({
+    entryPoints: ['src/webview/index.tsx'],
+    bundle: true,
+    outfile: 'webview-dist/index.js',
+    platform: 'browser',
+    format: 'iife',
+    sourcemap: true,
+  });
+
   if (watch) {
-    await extensionCtx.watch();
-    console.log('esbuild watching src/extension.ts ...');
+    await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
+    console.log('esbuild watching extension.ts and webview/index.tsx ...');
   } else {
     await extensionCtx.rebuild();
+    await webviewCtx.rebuild();
     await extensionCtx.dispose();
+    await webviewCtx.dispose();
   }
 }
 
