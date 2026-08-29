@@ -1,0 +1,32 @@
+{
+  "name": "vscode-git-client",
+  "displayName": "Git Client",
+  "description": "A three-column local Git client: branches/tags, commit graph, commit detail and staging.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["SCM Providers"],
+  "extensionKind": ["workspace"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onCommand:gitClient.open"],
+  "contributes": {
+    "commands": [
+      { "command": "gitClient.open", "title": "Git Client: Open" }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.21.0",
+    "preact": "^10.19.0",
+    "@testing-library/preact": "^3.2.3",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0"
+  }
+}
