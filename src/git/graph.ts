@@ -42,3 +42,38 @@ export async function getCommitLog(
       };
     });
 }
+
+export type LaneCommit = CommitNode & { lane: number };
+
+export function assignLanes(commits: CommitNode[]): LaneCommit[] {
+  const lanes: (string | null)[] = [];
+  const result: LaneCommit[] = [];
+
+  const findLaneOf = (sha: string): number => lanes.indexOf(sha);
+  const findFreeLane = (): number => {
+    const free = lanes.indexOf(null);
+    if (free !== -1) return free;
+    lanes.push(null);
+    return lanes.length - 1;
+  };
+
+  for (const commit of commits) {
+    let lane = findLaneOf(commit.sha);
+    if (lane === -1) {
+      lane = findFreeLane();
+    }
+    result.push({ ...commit, lane });
+
+    const [firstParent, ...otherParents] = commit.parents;
+    lanes[lane] = firstParent ?? null;
+
+    for (const parentSha of otherParents) {
+      if (findLaneOf(parentSha) === -1) {
+        const freeLane = findFreeLane();
+        lanes[freeLane] = parentSha;
+      }
+    }
+  }
+
+  return result;
+}
