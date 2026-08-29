@@ -4,13 +4,36 @@ import { parseWebviewMessage, type ExtensionToWebviewMessage, type WebviewToExte
 
 const DEBOUNCE_MS = 150;
 
+function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'webview-dist', 'index.js'));
+  const nonce = Math.random().toString(36).slice(2);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; script-src 'nonce-${nonce}'; style-src 'unsafe-inline';" />
+  <style>
+    body { margin: 0; font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+    .git-client-app { display: flex; height: 100vh; }
+    .column { flex: 1; overflow-y: auto; padding: 8px; border-right: 1px solid var(--vscode-panel-border); box-sizing: border-box; }
+    .column:last-child { border-right: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+}
+
 export function createGitClientPanel(context: vscode.ExtensionContext, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
   const panel = vscode.window.createWebviewPanel(
     'gitClient',
     'Git Client',
     vscode.ViewColumn.One,
-    { enableScripts: true, retainContextWhenHidden: true }
+    { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'webview-dist')] }
   );
+  panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
 
   const store = createStore(repoPath, gitApi);
   const unsubscribeStore = store.subscribe(state => {
