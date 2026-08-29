@@ -6,7 +6,7 @@
 
 **Architecture:** Extension host owns all git state via a `GitApi` (git CLI wrapper) and a `Store`; a single webview panel renders three Preact columns driven by a typed message protocol. No login, no external service.
 
-**Tech Stack:** TypeScript, Preact, esbuild, Vitest, `@testing-library/preact`, Node `child_process.execFile` (no git-wrapper dependency).
+**Tech Stack:** TypeScript, Preact, esbuild, Node `child_process.execFile` (no git-wrapper dependency). Vitest and `@testing-library/preact` are installed but unused for now — see Global Constraints.
 
 **Spec:** `docs/specs/2026-08-29-vscode-git-client-mvp.md`
 
@@ -21,187 +21,16 @@
 - Conflicted files open in VS Code's native merge editor — no custom conflict UI in V1.
 - Initial commit-log load is capped at 500 commits with manual "Load more" pagination.
 - No `simple-git` or other git-wrapper dependency — `child_process.execFile` directly.
-- No VS Code Extension Test harness (`@vscode/test-electron`) in V1 — all `vscode` API usage is unit-tested against a hand-written mock module.
+- **No automated tests for now.** Each task is implementation-only: write the code, type-check it, commit. Do not write test files unless the user explicitly asks. Vitest and `@testing-library/preact` stay installed (already used by Task 1) so testing can resume on request without re-adding tooling.
+- Verify each task by type-checking (`npx tsc --noEmit`) rather than by running tests.
 
 ---
 
-### Task 1: Extension Scaffolding & Activation
+### Task 1: Extension Scaffolding & Activation — DONE
 
-**Files:**
-- Create: `package.json`
-- Create: `tsconfig.json`
-- Create: `vitest.config.ts`
-- Create: `esbuild.js`
-- Create: `src/extension.ts`
-- Test: `test/mocks/vscode.ts`
-- Test: `test/extension.test.ts`
+Already implemented and committed (`feat: scaffold extension with activation command`). Included `package.json`, `tsconfig.json`, `vitest.config.ts`, `esbuild.js`, `src/extension.ts` (registers `gitClient.open`), plus `test/mocks/vscode.ts` and `test/extension.test.ts` (written before this plan moved to implementation-only tasks — left in place, not removed).
 
-**Interfaces:**
-- Produces: `activate(context: vscode.ExtensionContext): void`, `deactivate(): void`; registers command `gitClient.open`.
-
-- [ ] **Step 1: Write the failing test and its vscode mock**
-
-`test/mocks/vscode.ts`:
-```ts
-import { vi } from 'vitest';
-
-export const commands = {
-  registerCommand: vi.fn((_id: string, _handler: (...args: unknown[]) => unknown) => ({ dispose: vi.fn() })),
-};
-export const window = {
-  showInformationMessage: vi.fn(),
-};
-export const workspace: { workspaceFolders?: Array<{ uri: { fsPath: string } }> } = {};
-export const extensions = { getExtension: vi.fn() };
-export const Uri = { file: (path: string) => ({ fsPath: path, toString: () => `file://${path}` }) };
-export const ViewColumn = { One: 1, Two: 2, Three: 3 };
-```
-
-`test/extension.test.ts`:
-```ts
-import { describe, it, expect, vi } from 'vitest';
-import * as vscodeMock from './mocks/vscode';
-
-vi.mock('vscode', () => vscodeMock);
-
-import { activate } from '../src/extension';
-
-describe('activate', () => {
-  it('registers the gitClient.open command', () => {
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    activate(context);
-    expect(vscodeMock.commands.registerCommand).toHaveBeenCalledWith('gitClient.open', expect.any(Function));
-    expect(context.subscriptions).toHaveLength(1);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/extension.test.ts`
-Expected: FAIL — `Cannot find module '../src/extension'`
-
-- [ ] **Step 3: Write the scaffolding and minimal implementation**
-
-`package.json`:
-```json
-{
-  "name": "vscode-git-client",
-  "displayName": "Git Client",
-  "description": "A three-column local Git client: branches/tags, commit graph, commit detail and staging.",
-  "version": "0.0.1",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["SCM Providers"],
-  "extensionKind": ["workspace"],
-  "main": "./dist/extension.js",
-  "activationEvents": ["onCommand:gitClient.open"],
-  "contributes": {
-    "commands": [
-      { "command": "gitClient.open", "title": "Git Client: Open" }
-    ]
-  },
-  "scripts": {
-    "build": "node esbuild.js",
-    "test": "vitest run"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
-    "esbuild": "^0.21.0",
-    "preact": "^10.19.0",
-    "@testing-library/preact": "^3.2.3",
-    "jsdom": "^24.0.0",
-    "typescript": "^5.4.0",
-    "vitest": "^1.5.0"
-  }
-}
-```
-
-`tsconfig.json`:
-```json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "jsx": "react-jsx",
-    "jsxImportSource": "preact",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "outDir": "dist"
-  },
-  "include": ["src", "test"]
-}
-```
-
-`vitest.config.ts`:
-```ts
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    environment: 'node',
-  },
-});
-```
-
-`esbuild.js`:
-```js
-const esbuild = require('esbuild');
-
-const watch = process.argv.includes('--watch');
-
-async function build() {
-  const extensionCtx = await esbuild.context({
-    entryPoints: ['src/extension.ts'],
-    bundle: true,
-    outfile: 'dist/extension.js',
-    external: ['vscode'],
-    platform: 'node',
-    format: 'cjs',
-    sourcemap: true,
-  });
-
-  if (watch) {
-    await extensionCtx.watch();
-  } else {
-    await extensionCtx.rebuild();
-    await extensionCtx.dispose();
-  }
-}
-
-build().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
-```
-
-`src/extension.ts`:
-```ts
-import * as vscode from 'vscode';
-
-export function activate(context: vscode.ExtensionContext): void {
-  const disposable = vscode.commands.registerCommand('gitClient.open', () => {
-    vscode.window.showInformationMessage('Git Client');
-  });
-  context.subscriptions.push(disposable);
-}
-
-export function deactivate(): void {}
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `npx vitest run test/extension.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add package.json tsconfig.json vitest.config.ts esbuild.js src/extension.ts test/mocks/vscode.ts test/extension.test.ts
-git commit -m "feat: scaffold extension with activation command"
-```
+**Produces:** `activate(context: vscode.ExtensionContext): void`, `deactivate(): void`; registers command `gitClient.open`.
 
 ---
 
@@ -209,65 +38,11 @@ git commit -m "feat: scaffold extension with activation command"
 
 **Files:**
 - Create: `src/git/gitService.ts`
-- Test: `test/fixtures/createFixtureRepo.ts`
-- Test: `test/git/gitService.test.ts`
 
 **Interfaces:**
 - Produces: `runGit(repoPath: string, args: string[]): Promise<string>`, `class GitError extends Error`, `setGitBinaryPath(path: string): void`.
-- Produces (test helper): `createFixtureRepo(): string`, `commitFile(repoPath: string, fileName: string, content: string, message: string): string`.
 
-- [ ] **Step 1: Write the failing test and fixture helper**
-
-`test/fixtures/createFixtureRepo.ts`:
-```ts
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-
-export function createFixtureRepo(): string {
-  const repoPath = mkdtempSync(join(tmpdir(), 'git-client-fixture-'));
-  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoPath });
-  execFileSync('git', ['config', 'user.name', 'Test User'], { cwd: repoPath });
-  return repoPath;
-}
-
-export function commitFile(repoPath: string, fileName: string, content: string, message: string): string {
-  writeFileSync(join(repoPath, fileName), content);
-  execFileSync('git', ['add', fileName], { cwd: repoPath });
-  execFileSync('git', ['commit', '-q', '-m', message], { cwd: repoPath });
-  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoPath }).toString().trim();
-}
-```
-
-`test/git/gitService.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { runGit, GitError } from '../../src/git/gitService';
-import { createFixtureRepo, commitFile } from '../fixtures/createFixtureRepo';
-
-describe('runGit', () => {
-  it('runs a git command in the given repo and returns stdout', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'hello', 'initial commit');
-    const output = await runGit(repoPath, ['log', '--oneline']);
-    expect(output).toContain('initial commit');
-  });
-
-  it('rejects with GitError on an invalid git command', async () => {
-    const repoPath = createFixtureRepo();
-    await expect(runGit(repoPath, ['not-a-real-command'])).rejects.toBeInstanceOf(GitError);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/gitService.test.ts`
-Expected: FAIL — `Cannot find module '../../src/git/gitService'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/git/gitService.ts`:
 ```ts
@@ -299,15 +74,15 @@ export function runGit(repoPath: string, args: string[]): Promise<string> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/gitService.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/gitService.ts test/fixtures/createFixtureRepo.ts test/git/gitService.test.ts
+git add src/git/gitService.ts
 git commit -m "feat: add git CLI wrapper with error normalization"
 ```
 
@@ -317,53 +92,12 @@ git commit -m "feat: add git CLI wrapper with error normalization"
 
 **Files:**
 - Create: `src/git/refs.ts`
-- Test: `test/git/refs.test.ts`
 
 **Interfaces:**
 - Consumes: `runGit` from Task 2.
 - Produces: `listBranches(repoPath: string): Promise<{ local: BranchRef[]; remote: RemoteGroup[] }>`, `listTags(repoPath: string): Promise<TagRef[]>`, types `BranchRef`, `RemoteGroup`, `TagRef`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/git/refs.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { listBranches, listTags } from '../../src/git/refs';
-import { createFixtureRepo, commitFile } from '../fixtures/createFixtureRepo';
-import { execFileSync } from 'node:child_process';
-
-describe('listBranches', () => {
-  it('lists local branches with HEAD marker', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'hello', 'initial commit');
-    execFileSync('git', ['branch', 'feature-x'], { cwd: repoPath });
-
-    const { local } = await listBranches(repoPath);
-    const names = local.map(b => b.name).sort();
-    expect(names).toEqual(['feature-x', 'main']);
-    expect(local.find(b => b.name === 'main')?.isHead).toBe(true);
-    expect(local.find(b => b.name === 'feature-x')?.isHead).toBe(false);
-  });
-});
-
-describe('listTags', () => {
-  it('lists tags with sha', async () => {
-    const repoPath = createFixtureRepo();
-    const sha = commitFile(repoPath, 'a.txt', 'hello', 'initial commit');
-    execFileSync('git', ['tag', 'v1.0.0'], { cwd: repoPath });
-
-    const tags = await listTags(repoPath);
-    expect(tags).toEqual([{ name: 'v1.0.0', sha }]);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/refs.test.ts`
-Expected: FAIL — `Cannot find module '../../src/git/refs'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/git/refs.ts`:
 ```ts
@@ -411,15 +145,15 @@ export async function listTags(repoPath: string): Promise<TagRef[]> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/refs.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/refs.ts test/git/refs.test.ts
+git add src/git/refs.ts
 git commit -m "feat: list local/remote branches and tags"
 ```
 
@@ -429,54 +163,12 @@ git commit -m "feat: list local/remote branches and tags"
 
 **Files:**
 - Create: `src/git/status.ts`
-- Test: `test/git/status.test.ts`
 
 **Interfaces:**
 - Consumes: `runGit` from Task 2.
 - Produces: `getWorkingTreeStatus(repoPath: string): Promise<WorkingTreeStatus>`, `stageFile`, `unstageFile`, `discardFile`, types `FileChange`, `WorkingTreeStatus`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/git/status.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { getWorkingTreeStatus, stageFile, unstageFile, discardFile } from '../../src/git/status';
-import { createFixtureRepo, commitFile } from '../fixtures/createFixtureRepo';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-describe('working tree status + staging', () => {
-  it('reports an unstaged modified file, then staged after stageFile', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'hello', 'initial commit');
-    writeFileSync(join(repoPath, 'a.txt'), 'changed');
-
-    let status = await getWorkingTreeStatus(repoPath);
-    expect(status.unstaged).toEqual([{ path: 'a.txt', status: 'M' }]);
-    expect(status.staged).toEqual([]);
-
-    await stageFile(repoPath, 'a.txt');
-    status = await getWorkingTreeStatus(repoPath);
-    expect(status.staged).toEqual([{ path: 'a.txt', status: 'M' }]);
-    expect(status.unstaged).toEqual([]);
-
-    await unstageFile(repoPath, 'a.txt');
-    status = await getWorkingTreeStatus(repoPath);
-    expect(status.unstaged).toEqual([{ path: 'a.txt', status: 'M' }]);
-
-    await discardFile(repoPath, 'a.txt');
-    status = await getWorkingTreeStatus(repoPath);
-    expect(status.unstaged).toEqual([]);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/status.test.ts`
-Expected: FAIL — `Cannot find module '../../src/git/status'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/git/status.ts`:
 ```ts
@@ -522,15 +214,15 @@ export async function discardFile(repoPath: string, filePath: string): Promise<v
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/status.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/status.ts test/git/status.test.ts
+git add src/git/status.ts
 git commit -m "feat: working tree status and whole-file stage/unstage/discard"
 ```
 
@@ -540,54 +232,12 @@ git commit -m "feat: working tree status and whole-file stage/unstage/discard"
 
 **Files:**
 - Create: `src/git/graph.ts`
-- Test: `test/git/graph.test.ts`
 
 **Interfaces:**
 - Consumes: `runGit` from Task 2.
 - Produces: `getCommitLog(repoPath: string, opts: { refs?: string[]; limit: number; offset: number }): Promise<CommitNode[]>`, type `CommitNode`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/git/graph.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { getCommitLog } from '../../src/git/graph';
-import { createFixtureRepo, commitFile } from '../fixtures/createFixtureRepo';
-
-describe('getCommitLog', () => {
-  it('returns commits newest-first with parents and message', async () => {
-    const repoPath = createFixtureRepo();
-    const first = commitFile(repoPath, 'a.txt', 'one', 'first commit');
-    const second = commitFile(repoPath, 'a.txt', 'two', 'second commit');
-
-    const log = await getCommitLog(repoPath, { limit: 10, offset: 0 });
-
-    expect(log[0].sha).toBe(second);
-    expect(log[0].parents).toEqual([first]);
-    expect(log[0].message).toBe('second commit');
-    expect(log[1].sha).toBe(first);
-    expect(log[1].parents).toEqual([]);
-  });
-
-  it('respects limit and offset for pagination', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'one', 'first commit');
-    commitFile(repoPath, 'a.txt', 'two', 'second commit');
-    commitFile(repoPath, 'a.txt', 'three', 'third commit');
-
-    const page = await getCommitLog(repoPath, { limit: 1, offset: 1 });
-    expect(page).toHaveLength(1);
-    expect(page[0].message).toBe('second commit');
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/graph.test.ts`
-Expected: FAIL — `Cannot find module '../../src/git/graph'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/git/graph.ts`:
 ```ts
@@ -637,15 +287,15 @@ export async function getCommitLog(
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/graph.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/graph.ts test/git/graph.test.ts
+git add src/git/graph.ts
 git commit -m "feat: paginated commit log parsing"
 ```
 
@@ -655,68 +305,12 @@ git commit -m "feat: paginated commit log parsing"
 
 **Files:**
 - Create: `src/git/commit.ts`
-- Test: `test/git/commit.test.ts`
 
 **Interfaces:**
 - Consumes: `runGit` from Task 2; type `CommitNode` from Task 5; type `FileChange` from Task 4.
 - Produces: `getCommitDetail(repoPath: string, sha: string): Promise<CommitDetail>`, `commit(repoPath: string, message: string, opts: { amend: boolean }): Promise<void>`, type `CommitDetail`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/git/commit.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { getCommitDetail, commit } from '../../src/git/commit';
-import { createFixtureRepo, commitFile } from '../fixtures/createFixtureRepo';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-
-describe('getCommitDetail', () => {
-  it('returns message, author, date, parents, and changed files', async () => {
-    const repoPath = createFixtureRepo();
-    const first = commitFile(repoPath, 'a.txt', 'one', 'first commit');
-    const second = commitFile(repoPath, 'a.txt', 'two', 'second commit');
-
-    const detail = await getCommitDetail(repoPath, second);
-    expect(detail.sha).toBe(second);
-    expect(detail.parents).toEqual([first]);
-    expect(detail.message).toBe('second commit');
-    expect(detail.files).toEqual([{ path: 'a.txt', status: 'M' }]);
-  });
-});
-
-describe('commit', () => {
-  it('creates a commit from staged changes', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'one', 'first commit');
-    writeFileSync(join(repoPath, 'b.txt'), 'new file');
-    execFileSync('git', ['add', 'b.txt'], { cwd: repoPath });
-
-    await commit(repoPath, 'add b.txt', { amend: false });
-
-    const log = execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: repoPath }).toString().trim();
-    expect(log).toBe('add b.txt');
-  });
-
-  it('amends the previous commit message', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'one', 'wrong message');
-
-    await commit(repoPath, 'corrected message', { amend: true });
-
-    const log = execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: repoPath }).toString().trim();
-    expect(log).toBe('corrected message');
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/commit.test.ts`
-Expected: FAIL — `Cannot find module '../../src/git/commit'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/git/commit.ts`:
 ```ts
@@ -755,15 +349,15 @@ export async function commit(repoPath: string, message: string, opts: { amend: b
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/commit.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/commit.ts test/git/commit.test.ts
+git add src/git/commit.ts
 git commit -m "feat: commit detail lookup and commit/amend"
 ```
 
@@ -773,56 +367,12 @@ git commit -m "feat: commit detail lookup and commit/amend"
 
 **Files:**
 - Modify: `src/git/graph.ts`
-- Test: `test/git/laneAssignment.test.ts`
 
 **Interfaces:**
 - Consumes: type `CommitNode` from Task 5 (same file).
 - Produces: `assignLanes(commits: CommitNode[]): LaneCommit[]`, type `LaneCommit`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/git/laneAssignment.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { assignLanes, type CommitNode } from '../../src/git/graph';
-
-const base: Omit<CommitNode, 'sha' | 'parents'> = { author: 'a', date: 'd', message: 'm', refs: [] };
-
-describe('assignLanes', () => {
-  it('keeps a linear history on a single lane', () => {
-    const commits: CommitNode[] = [
-      { ...base, sha: 'c3', parents: ['c2'] },
-      { ...base, sha: 'c2', parents: ['c1'] },
-      { ...base, sha: 'c1', parents: [] },
-    ];
-    const lanes = assignLanes(commits).map(c => c.lane);
-    expect(lanes).toEqual([0, 0, 0]);
-  });
-
-  it('opens a second lane for a merge and closes it at the common ancestor', () => {
-    const commits: CommitNode[] = [
-      { ...base, sha: 'm', parents: ['a', 'b'] },
-      { ...base, sha: 'a', parents: ['base'] },
-      { ...base, sha: 'b', parents: ['base'] },
-      { ...base, sha: 'base', parents: [] },
-    ];
-    const result = assignLanes(commits).map(c => ({ sha: c.sha, lane: c.lane }));
-    expect(result).toEqual([
-      { sha: 'm', lane: 0 },
-      { sha: 'a', lane: 0 },
-      { sha: 'b', lane: 1 },
-      { sha: 'base', lane: 0 },
-    ]);
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/laneAssignment.test.ts`
-Expected: FAIL — `assignLanes is not exported`
-
-- [ ] **Step 3: Add lane assignment to graph.ts**
+- [ ] **Step 1: Append lane assignment to graph.ts**
 
 Append to `src/git/graph.ts`:
 ```ts
@@ -862,15 +412,15 @@ export function assignLanes(commits: CommitNode[]): LaneCommit[] {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/laneAssignment.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/graph.ts test/git/laneAssignment.test.ts
+git add src/git/graph.ts
 git commit -m "feat: lane assignment for commit graph rendering"
 ```
 
@@ -880,75 +430,12 @@ git commit -m "feat: lane assignment for commit graph rendering"
 
 **Files:**
 - Create: `src/git/remote.ts`
-- Test: `test/git/remote.test.ts`
 
 **Interfaces:**
-- Consumes: `runGit` from Task 2; `listBranches` from Task 3 (test only).
+- Consumes: `runGit` from Task 2.
 - Produces: `checkoutBranch`, `createBranch`, `deleteBranch`, `fetch`, `pull`, `push`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/git/remote.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { checkoutBranch, createBranch, deleteBranch, fetch, pull, push } from '../../src/git/remote';
-import { createFixtureRepo, commitFile } from '../fixtures/createFixtureRepo';
-import { listBranches } from '../../src/git/refs';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-describe('local branch operations', () => {
-  it('creates, checks out, and deletes a branch', async () => {
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'hello', 'initial commit');
-
-    await createBranch(repoPath, 'feature-x', 'main');
-    await checkoutBranch(repoPath, 'feature-x');
-    const head = execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: repoPath }).toString().trim();
-    expect(head).toBe('feature-x');
-
-    await checkoutBranch(repoPath, 'main');
-    await deleteBranch(repoPath, 'feature-x', false);
-    const { local } = await listBranches(repoPath);
-    expect(local.map(b => b.name)).not.toContain('feature-x');
-  });
-});
-
-describe('remote operations', () => {
-  it('pushes a new branch to a bare remote and pulls a later commit into a clone', async () => {
-    const bareRemotePath = mkdtempSync(join(tmpdir(), 'git-client-bare-'));
-    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', bareRemotePath]);
-
-    const repoPath = createFixtureRepo();
-    commitFile(repoPath, 'a.txt', 'hello', 'initial commit');
-    execFileSync('git', ['remote', 'add', 'origin', bareRemotePath], { cwd: repoPath });
-    await push(repoPath, { setUpstream: true });
-
-    const clonePath = mkdtempSync(join(tmpdir(), 'git-client-clone-'));
-    execFileSync('git', ['clone', '-q', bareRemotePath, clonePath]);
-
-    commitFile(repoPath, 'b.txt', 'more', 'second commit');
-    await push(repoPath, { setUpstream: false });
-
-    await fetch(clonePath, 'origin');
-    const { remote } = await listBranches(clonePath);
-    expect(remote.find(r => r.remoteName === 'origin')?.branches.map(b => b.name)).toContain('main');
-
-    await pull(clonePath);
-    const output = execFileSync('git', ['log', '--oneline'], { cwd: clonePath }).toString();
-    expect(output).toContain('second commit');
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/git/remote.test.ts`
-Expected: FAIL — `Cannot find module '../../src/git/remote'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/git/remote.ts`:
 ```ts
@@ -986,15 +473,15 @@ export async function push(repoPath: string, opts: { setUpstream: boolean }): Pr
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/git/remote.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/git/remote.ts test/git/remote.test.ts
+git add src/git/remote.ts
 git commit -m "feat: branch checkout/create/delete and fetch/pull/push"
 ```
 
@@ -1004,42 +491,12 @@ git commit -m "feat: branch checkout/create/delete and fetch/pull/push"
 
 **Files:**
 - Create: `src/panel/messages.ts`
-- Test: `test/panel/messages.test.ts`
 
 **Interfaces:**
 - Consumes: `BranchRef`, `RemoteGroup`, `TagRef` (Task 3); `LaneCommit` (Task 7); `WorkingTreeStatus` (Task 4); `CommitDetail` (Task 6).
 - Produces: types `ClientState`, `ExtensionToWebviewMessage`, `WebviewToExtensionMessage`; `parseWebviewMessage(raw: unknown): WebviewToExtensionMessage | null`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/panel/messages.test.ts`:
-```ts
-import { describe, it, expect } from 'vitest';
-import { parseWebviewMessage } from '../../src/panel/messages';
-
-describe('parseWebviewMessage', () => {
-  it('accepts a well-formed message', () => {
-    const msg = parseWebviewMessage({ type: 'graph:selectCommit', payload: { sha: 'abc123' } });
-    expect(msg).toEqual({ type: 'graph:selectCommit', payload: { sha: 'abc123' } });
-  });
-
-  it('rejects an unknown type', () => {
-    expect(parseWebviewMessage({ type: 'not:a:real:type' })).toBeNull();
-  });
-
-  it('rejects a non-object payload', () => {
-    expect(parseWebviewMessage('graph:selectCommit')).toBeNull();
-    expect(parseWebviewMessage(null)).toBeNull();
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/panel/messages.test.ts`
-Expected: FAIL — `Cannot find module '../../src/panel/messages'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/panel/messages.ts`:
 ```ts
@@ -1092,15 +549,15 @@ export function parseWebviewMessage(raw: unknown): WebviewToExtensionMessage | n
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/panel/messages.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/panel/messages.ts test/panel/messages.test.ts
+git add src/panel/messages.ts
 git commit -m "feat: webview <-> extension message protocol"
 ```
 
@@ -1110,96 +567,12 @@ git commit -m "feat: webview <-> extension message protocol"
 
 **Files:**
 - Create: `src/panel/state.ts`
-- Test: `test/panel/state.test.ts`
 
 **Interfaces:**
 - Consumes: `ClientState` (Task 9); all `git/*.ts` function signatures (Tasks 3, 4, 6, 7, 8).
 - Produces: type `GitApi` (aggregates all git functions), `createStore(repoPath: string, gitApi: GitApi): Store`, type `Store` with `getState`, `subscribe`, `refreshAll`, `selectCommit`, `loadMore`, `setRefFilter`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/panel/state.test.ts`:
-```ts
-import { describe, it, expect, vi } from 'vitest';
-import { createStore, type GitApi } from '../../src/panel/state';
-
-function makeFakeGitApi(overrides: Partial<GitApi> = {}): GitApi {
-  return {
-    listBranches: vi.fn().mockResolvedValue({ local: [], remote: [] }),
-    listTags: vi.fn().mockResolvedValue([]),
-    getCommitLog: vi.fn().mockResolvedValue([]),
-    getCommitDetail: vi.fn().mockResolvedValue({ sha: 'abc', parents: [], author: '', date: '', message: '', refs: [], files: [] }),
-    getWorkingTreeStatus: vi.fn().mockResolvedValue({ staged: [], unstaged: [], conflicted: [] }),
-    stageFile: vi.fn().mockResolvedValue(undefined),
-    unstageFile: vi.fn().mockResolvedValue(undefined),
-    discardFile: vi.fn().mockResolvedValue(undefined),
-    commit: vi.fn().mockResolvedValue(undefined),
-    checkoutBranch: vi.fn().mockResolvedValue(undefined),
-    createBranch: vi.fn().mockResolvedValue(undefined),
-    deleteBranch: vi.fn().mockResolvedValue(undefined),
-    fetch: vi.fn().mockResolvedValue(undefined),
-    pull: vi.fn().mockResolvedValue(undefined),
-    push: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
-
-describe('store', () => {
-  it('refreshAll populates state from the git API and notifies subscribers', async () => {
-    const gitApi = makeFakeGitApi({
-      listBranches: vi.fn().mockResolvedValue({ local: [{ name: 'main', sha: '1', isHead: true }], remote: [] }),
-    });
-    const store = createStore('/repo', gitApi);
-    const seen: unknown[] = [];
-    store.subscribe(state => seen.push(state));
-
-    await store.refreshAll();
-
-    expect(store.getState().branches.local[0].name).toBe('main');
-    expect(seen.length).toBeGreaterThan(0);
-  });
-
-  it('selectCommit fetches and stores commit detail, or clears it for working-tree', async () => {
-    const gitApi = makeFakeGitApi();
-    const store = createStore('/repo', gitApi);
-
-    await store.selectCommit('abc');
-    expect(store.getState().selectedCommit).toBe('abc');
-    expect(store.getState().selectedCommitDetail?.sha).toBe('abc');
-
-    await store.selectCommit('working-tree');
-    expect(store.getState().selectedCommitDetail).toBeNull();
-  });
-
-  it('loadMore appends to the existing commit log', async () => {
-    const commits = [{ sha: 'a', parents: [], author: '', date: '', message: '', refs: [], lane: 0 }];
-    const gitApi = makeFakeGitApi({ getCommitLog: vi.fn().mockResolvedValue(commits) });
-    const store = createStore('/repo', gitApi);
-
-    await store.refreshAll();
-    await store.loadMore();
-
-    expect(store.getState().commitLog).toHaveLength(2);
-  });
-
-  it('setRefFilter stores the filter and refetches the commit log with it', async () => {
-    const gitApi = makeFakeGitApi();
-    const store = createStore('/repo', gitApi);
-
-    await store.setRefFilter(['feature-x']);
-
-    expect(store.getState().selectedRefFilter).toEqual(['feature-x']);
-    expect(gitApi.getCommitLog).toHaveBeenCalledWith('/repo', { refs: ['feature-x'], limit: 500, offset: 0 });
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/panel/state.test.ts`
-Expected: FAIL — `Cannot find module '../../src/panel/state'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/panel/state.ts`:
 ```ts
@@ -1303,15 +676,15 @@ export function createStore(repoPath: string, gitApi: GitApi): Store {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/panel/state.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/panel/state.ts test/panel/state.test.ts
+git add src/panel/state.ts
 git commit -m "feat: extension-side state store over GitApi"
 ```
 
@@ -1321,161 +694,12 @@ git commit -m "feat: extension-side state store over GitApi"
 
 **Files:**
 - Create: `src/panel/GitClientPanel.ts`
-- Modify: `test/mocks/vscode.ts`
-- Test: `test/panel/GitClientPanel.test.ts`
 
 **Interfaces:**
 - Consumes: `createStore`, `GitApi`, `Store` (Task 10); `parseWebviewMessage`, `WebviewToExtensionMessage`, `ExtensionToWebviewMessage` (Task 9).
 - Produces: `createGitClientPanel(context: vscode.ExtensionContext, repoPath: string, gitApi: GitApi): vscode.WebviewPanel`.
 
-- [ ] **Step 1: Write the failing test and extend the vscode mock**
-
-`test/mocks/vscode.ts` (full replacement):
-```ts
-import { vi } from 'vitest';
-
-export const commands = {
-  registerCommand: vi.fn((_id: string, _handler: (...args: unknown[]) => unknown) => ({ dispose: vi.fn() })),
-  executeCommand: vi.fn(),
-};
-
-export const window = {
-  showInformationMessage: vi.fn(),
-  createWebviewPanel: vi.fn(() => {
-    let messageHandler: ((raw: unknown) => void) | undefined;
-    let disposeHandler: (() => void) | undefined;
-    return {
-      webview: {
-        html: '',
-        postMessage: vi.fn(),
-        onDidReceiveMessage: vi.fn((handler: (raw: unknown) => void) => {
-          messageHandler = handler;
-          return { dispose: vi.fn() };
-        }),
-        __trigger: (raw: unknown) => messageHandler?.(raw),
-      },
-      onDidDispose: vi.fn((handler: () => void) => {
-        disposeHandler = handler;
-        return { dispose: vi.fn() };
-      }),
-      __triggerDispose: () => disposeHandler?.(),
-    };
-  }),
-};
-
-export const workspace: { workspaceFolders?: Array<{ uri: { fsPath: string } }>; createFileSystemWatcher: ReturnType<typeof vi.fn> } = {
-  workspaceFolders: undefined,
-  createFileSystemWatcher: vi.fn(() => {
-    const handlers: { change?: (uri: unknown) => void; create?: (uri: unknown) => void; delete?: (uri: unknown) => void } = {};
-    return {
-      onDidChange: vi.fn((h: (uri: unknown) => void) => { handlers.change = h; return { dispose: vi.fn() }; }),
-      onDidCreate: vi.fn((h: (uri: unknown) => void) => { handlers.create = h; return { dispose: vi.fn() }; }),
-      onDidDelete: vi.fn((h: (uri: unknown) => void) => { handlers.delete = h; return { dispose: vi.fn() }; }),
-      dispose: vi.fn(),
-      __trigger: () => handlers.change?.({}),
-    };
-  }),
-};
-
-export const extensions = { getExtension: vi.fn() };
-export const Uri = { file: (path: string) => ({ fsPath: path, toString: () => `file://${path}` }) };
-export const ViewColumn = { One: 1, Two: 2, Three: 3 };
-export class RelativePattern {
-  constructor(public base: string, public pattern: string) {}
-}
-```
-
-`test/panel/GitClientPanel.test.ts`:
-```ts
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as vscodeMock from '../mocks/vscode';
-
-vi.mock('vscode', () => vscodeMock);
-
-import { createGitClientPanel } from '../../src/panel/GitClientPanel';
-import type { GitApi } from '../../src/panel/state';
-
-function makeFakeGitApi(overrides: Partial<GitApi> = {}): GitApi {
-  return {
-    listBranches: vi.fn().mockResolvedValue({ local: [], remote: [] }),
-    listTags: vi.fn().mockResolvedValue([]),
-    getCommitLog: vi.fn().mockResolvedValue([]),
-    getCommitDetail: vi.fn().mockResolvedValue({ sha: 'a', parents: [], author: '', date: '', message: '', refs: [], files: [] }),
-    getWorkingTreeStatus: vi.fn().mockResolvedValue({ staged: [], unstaged: [], conflicted: [] }),
-    stageFile: vi.fn().mockResolvedValue(undefined),
-    unstageFile: vi.fn().mockResolvedValue(undefined),
-    discardFile: vi.fn().mockResolvedValue(undefined),
-    commit: vi.fn().mockResolvedValue(undefined),
-    checkoutBranch: vi.fn().mockResolvedValue(undefined),
-    createBranch: vi.fn().mockResolvedValue(undefined),
-    deleteBranch: vi.fn().mockResolvedValue(undefined),
-    fetch: vi.fn().mockResolvedValue(undefined),
-    pull: vi.fn().mockResolvedValue(undefined),
-    push: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
-
-describe('createGitClientPanel', () => {
-  beforeEach(() => {
-    (vscodeMock.window.createWebviewPanel as any).mockClear();
-    (vscodeMock.workspace.createFileSystemWatcher as any).mockClear();
-  });
-
-  it('posts a state:update message to the webview after initial refresh', async () => {
-    const gitApi = makeFakeGitApi();
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    const panel = createGitClientPanel(context, '/repo', gitApi) as any;
-
-    await vi.waitFor(() => expect(panel.webview.postMessage).toHaveBeenCalled());
-    const [message] = panel.webview.postMessage.mock.calls.at(-1);
-    expect(message.type).toBe('state:update');
-  });
-
-  it('routes a stage:file message to gitApi.stageFile and refreshes', async () => {
-    const gitApi = makeFakeGitApi();
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    const panel = createGitClientPanel(context, '/repo', gitApi) as any;
-
-    panel.webview.__trigger({ type: 'stage:file', payload: { path: 'a.txt' } });
-    await vi.waitFor(() => expect(gitApi.stageFile).toHaveBeenCalledWith('/repo', 'a.txt'));
-    expect(gitApi.getWorkingTreeStatus).toHaveBeenCalled();
-  });
-
-  it('routes a file:openConflict message to vscode.commands.executeCommand', async () => {
-    const gitApi = makeFakeGitApi();
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    const panel = createGitClientPanel(context, '/repo', gitApi) as any;
-
-    panel.webview.__trigger({ type: 'file:openConflict', payload: { path: 'c.txt' } });
-    await vi.waitFor(() => expect(vscodeMock.commands.executeCommand).toHaveBeenCalled());
-  });
-
-  it('debounces refresh when the file watcher fires multiple times quickly', async () => {
-    vi.useFakeTimers();
-    const gitApi = makeFakeGitApi();
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    createGitClientPanel(context, '/repo', gitApi);
-    const callsBefore = (gitApi.listBranches as any).mock.calls.length;
-
-    const watcherInstance = (vscodeMock.workspace.createFileSystemWatcher as any).mock.results[0].value;
-    watcherInstance.__trigger();
-    watcherInstance.__trigger();
-    watcherInstance.__trigger();
-
-    await vi.advanceTimersByTimeAsync(150);
-    expect((gitApi.listBranches as any).mock.calls.length).toBe(callsBefore + 1);
-    vi.useRealTimers();
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/panel/GitClientPanel.test.ts`
-Expected: FAIL — `Cannot find module '../../src/panel/GitClientPanel'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/panel/GitClientPanel.ts`:
 ```ts
@@ -1579,15 +803,15 @@ export function createGitClientPanel(context: vscode.ExtensionContext, repoPath:
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/panel/GitClientPanel.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/panel/GitClientPanel.ts test/mocks/vscode.ts test/panel/GitClientPanel.test.ts
+git add src/panel/GitClientPanel.ts
 git commit -m "feat: webview panel lifecycle, message routing, debounced refresh"
 ```
 
@@ -1600,42 +824,12 @@ git commit -m "feat: webview panel lifecycle, message routing, debounced refresh
 - Create: `src/webview/App.tsx`
 - Create: `src/webview/index.tsx`
 - Modify: `esbuild.js`
-- Modify: `package.json` (add webview devDependencies already present in Task 1; no change needed here beyond esbuild wiring)
-- Test: `test/webview/App.test.tsx`
 
 **Interfaces:**
 - Consumes: `ClientState`, `WebviewToExtensionMessage`, `ExtensionToWebviewMessage` (Task 9).
 - Produces: `getVsCodeApi()`, `onExtensionMessage(handler)`, `useClientState()`, component `App`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/webview/App.test.tsx`:
-```tsx
-// @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/preact';
-import { App } from '../../src/webview/App';
-
-beforeEach(() => {
-  (globalThis as any).acquireVsCodeApi = vi.fn(() => ({ postMessage: vi.fn(), getState: vi.fn(), setState: vi.fn() }));
-});
-
-describe('App', () => {
-  it('renders three columns', () => {
-    render(<App />);
-    expect(screen.getByTestId('branches-column')).toBeTruthy();
-    expect(screen.getByTestId('graph-column')).toBeTruthy();
-    expect(screen.getByTestId('detail-column')).toBeTruthy();
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/webview/App.test.tsx`
-Expected: FAIL — `Cannot find module '../../src/webview/App'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/webview/lib/vscodeApi.ts`:
 ```ts
@@ -1712,7 +906,7 @@ import { App } from './App';
 render(<App />, document.getElementById('root')!);
 ```
 
-`esbuild.js` (modify, replace whole file):
+`esbuild.js` (replace whole file):
 ```js
 const esbuild = require('esbuild');
 
@@ -1740,6 +934,7 @@ async function build() {
 
   if (watch) {
     await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
+    console.log('esbuild watching extension.ts and webview/index.tsx ...');
   } else {
     await extensionCtx.rebuild();
     await webviewCtx.rebuild();
@@ -1754,15 +949,15 @@ build().catch(err => {
 });
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check and build**
 
-Run: `npx vitest run test/webview/App.test.tsx`
-Expected: PASS
+Run: `npx tsc --noEmit && npm run build`
+Expected: no errors; `webview-dist/index.js` produced
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/webview/lib/vscodeApi.ts src/webview/App.tsx src/webview/index.tsx esbuild.js test/webview/App.test.tsx
+git add src/webview/lib/vscodeApi.ts src/webview/App.tsx src/webview/index.tsx esbuild.js
 git commit -m "feat: webview app shell with three placeholder columns"
 ```
 
@@ -1772,60 +967,12 @@ git commit -m "feat: webview app shell with three placeholder columns"
 
 **Files:**
 - Create: `src/webview/columns/BranchesColumn.tsx`
-- Test: `test/webview/BranchesColumn.test.tsx`
 
 **Interfaces:**
 - Consumes: `ClientState['branches']`, `ClientState['tags']`, `WebviewToExtensionMessage` (Task 9).
 - Produces: component `BranchesColumn(props: { branches, tags, dispatch }): JSX.Element`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/webview/BranchesColumn.test.tsx`:
-```tsx
-// @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/preact';
-import { BranchesColumn } from '../../src/webview/columns/BranchesColumn';
-
-const branches = {
-  local: [
-    { name: 'main', sha: '1', isHead: true },
-    { name: 'feature-x', sha: '2', isHead: false },
-  ],
-  remote: [{ remoteName: 'origin', branches: [{ name: 'main', sha: '1', isHead: false }] }],
-};
-const tags = [{ name: 'v1.0.0', sha: '1' }];
-
-describe('BranchesColumn', () => {
-  it('renders local, remote, and tag groups', () => {
-    render(<BranchesColumn branches={branches} tags={tags} dispatch={vi.fn()} />);
-    expect(screen.getByTestId('local-branch-main')).toBeTruthy();
-    expect(screen.getByTestId('remote-branch-origin-main')).toBeTruthy();
-    expect(screen.getByTestId('tag-v1.0.0')).toBeTruthy();
-  });
-
-  it('dispatches graph:selectRefFilter when a local branch is clicked', () => {
-    const dispatch = vi.fn();
-    render(<BranchesColumn branches={branches} tags={tags} dispatch={dispatch} />);
-    fireEvent.click(screen.getByTestId('select-branch-main'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'graph:selectRefFilter', payload: { refs: ['main'] } });
-  });
-
-  it('dispatches branch:checkout when Checkout is clicked', () => {
-    const dispatch = vi.fn();
-    render(<BranchesColumn branches={branches} tags={tags} dispatch={dispatch} />);
-    fireEvent.click(screen.getByLabelText('checkout-feature-x'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'branch:checkout', payload: { ref: 'feature-x' } });
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/webview/BranchesColumn.test.tsx`
-Expected: FAIL — `Cannot find module '../../src/webview/columns/BranchesColumn'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/webview/columns/BranchesColumn.tsx`:
 ```tsx
@@ -1898,15 +1045,15 @@ export function BranchesColumn({ branches, tags, dispatch }: Props) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/webview/BranchesColumn.test.tsx`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/webview/columns/BranchesColumn.tsx test/webview/BranchesColumn.test.tsx
+git add src/webview/columns/BranchesColumn.tsx
 git commit -m "feat: branches and tags column"
 ```
 
@@ -1916,62 +1063,12 @@ git commit -m "feat: branches and tags column"
 
 **Files:**
 - Create: `src/webview/columns/GraphColumn.tsx`
-- Test: `test/webview/GraphColumn.test.tsx`
 
 **Interfaces:**
 - Consumes: `ClientState['commitLog']`, `ClientState['selectedCommit']`, `WebviewToExtensionMessage` (Task 9); `LaneCommit` (Task 7).
 - Produces: component `GraphColumn(props: { commitLog, selectedCommit, dispatch }): JSX.Element`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/webview/GraphColumn.test.tsx`:
-```tsx
-// @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/preact';
-import { GraphColumn } from '../../src/webview/columns/GraphColumn';
-
-const commitLog = [
-  { sha: 'a', parents: [], author: 'x', date: '2026-01-01', message: 'first', refs: [], lane: 0 },
-  { sha: 'b', parents: ['a'], author: 'x', date: '2026-01-02', message: 'second', refs: [], lane: 1 },
-];
-
-describe('GraphColumn', () => {
-  it('renders a row per commit, offset by lane', () => {
-    render(<GraphColumn commitLog={commitLog} selectedCommit="working-tree" dispatch={vi.fn()} />);
-    const row = screen.getByTestId('commit-b') as HTMLElement;
-    expect(row.style.paddingLeft).toBe('16px');
-  });
-
-  it('dispatches graph:selectCommit when a commit row is clicked', () => {
-    const dispatch = vi.fn();
-    render(<GraphColumn commitLog={commitLog} selectedCommit="working-tree" dispatch={dispatch} />);
-    fireEvent.click(screen.getByText('first'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'graph:selectCommit', payload: { sha: 'a' } });
-  });
-
-  it('dispatches graph:selectCommit with working-tree when the pinned row is clicked', () => {
-    const dispatch = vi.fn();
-    render(<GraphColumn commitLog={commitLog} selectedCommit="a" dispatch={dispatch} />);
-    fireEvent.click(screen.getByTestId('select-working-tree'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'graph:selectCommit', payload: { sha: 'working-tree' } });
-  });
-
-  it('dispatches graph:loadMore when Load more is clicked', () => {
-    const dispatch = vi.fn();
-    render(<GraphColumn commitLog={commitLog} selectedCommit="working-tree" dispatch={dispatch} />);
-    fireEvent.click(screen.getByTestId('load-more'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'graph:loadMore' });
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/webview/GraphColumn.test.tsx`
-Expected: FAIL — `Cannot find module '../../src/webview/columns/GraphColumn'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/webview/columns/GraphColumn.tsx`:
 ```tsx
@@ -2013,15 +1110,15 @@ export function GraphColumn({ commitLog, selectedCommit, dispatch }: Props) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/webview/GraphColumn.test.tsx`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/webview/columns/GraphColumn.tsx test/webview/GraphColumn.test.tsx
+git add src/webview/columns/GraphColumn.tsx
 git commit -m "feat: commit graph column with lane offsets"
 ```
 
@@ -2031,80 +1128,12 @@ git commit -m "feat: commit graph column with lane offsets"
 
 **Files:**
 - Create: `src/webview/columns/DetailColumn.tsx`
-- Test: `test/webview/DetailColumn.test.tsx`
 
 **Interfaces:**
 - Consumes: `ClientState['selectedCommit']`, `ClientState['selectedCommitDetail']`, `ClientState['workingTreeStatus']`, `WebviewToExtensionMessage` (Task 9).
 - Produces: component `DetailColumn(props): JSX.Element`.
 
-- [ ] **Step 1: Write the failing test**
-
-`test/webview/DetailColumn.test.tsx`:
-```tsx
-// @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/preact';
-import { DetailColumn } from '../../src/webview/columns/DetailColumn';
-
-const workingTreeStatus = {
-  staged: [{ path: 'a.txt', status: 'M' as const }],
-  unstaged: [{ path: 'b.txt', status: 'M' as const }],
-  conflicted: [{ path: 'c.txt', status: 'U' as const }],
-};
-
-describe('DetailColumn', () => {
-  it('renders commit detail when a commit is selected', () => {
-    const detail = {
-      sha: 'x', parents: [], author: 'a', date: 'd', message: 'msg', refs: [],
-      files: [{ path: 'a.txt', status: 'M' as const }],
-    };
-    render(<DetailColumn selectedCommit="x" selectedCommitDetail={detail} workingTreeStatus={workingTreeStatus} dispatch={vi.fn()} />);
-    expect(screen.getByTestId('commit-message').textContent).toBe('msg');
-    expect(screen.getByTestId('detail-file-a.txt')).toBeTruthy();
-  });
-
-  it('stages an unstaged file', () => {
-    const dispatch = vi.fn();
-    render(<DetailColumn selectedCommit="working-tree" selectedCommitDetail={null} workingTreeStatus={workingTreeStatus} dispatch={dispatch} />);
-    fireEvent.click(screen.getByLabelText('stage-b.txt'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'stage:file', payload: { path: 'b.txt' } });
-  });
-
-  it('unstages a staged file', () => {
-    const dispatch = vi.fn();
-    render(<DetailColumn selectedCommit="working-tree" selectedCommitDetail={null} workingTreeStatus={workingTreeStatus} dispatch={dispatch} />);
-    fireEvent.click(screen.getByLabelText('unstage-a.txt'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'stage:unfile', payload: { path: 'a.txt' } });
-  });
-
-  it('opens the conflict resolver for a conflicted file', () => {
-    const dispatch = vi.fn();
-    render(<DetailColumn selectedCommit="working-tree" selectedCommitDetail={null} workingTreeStatus={workingTreeStatus} dispatch={dispatch} />);
-    fireEvent.click(screen.getByTestId('resolve-c.txt'));
-    expect(dispatch).toHaveBeenCalledWith({ type: 'file:openConflict', payload: { path: 'c.txt' } });
-  });
-
-  it('disables Commit until a message is entered, then dispatches commit:create', () => {
-    const dispatch = vi.fn();
-    render(<DetailColumn selectedCommit="working-tree" selectedCommitDetail={null} workingTreeStatus={workingTreeStatus} dispatch={dispatch} />);
-    const button = screen.getByTestId('commit-button') as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
-
-    fireEvent.input(screen.getByTestId('commit-message-input'), { target: { value: 'fix bug' } });
-    expect(button.disabled).toBe(false);
-
-    fireEvent.click(button);
-    expect(dispatch).toHaveBeenCalledWith({ type: 'commit:create', payload: { message: 'fix bug', amend: false } });
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run test/webview/DetailColumn.test.tsx`
-Expected: FAIL — `Cannot find module '../../src/webview/columns/DetailColumn'`
-
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 1: Write the implementation**
 
 `src/webview/columns/DetailColumn.tsx`:
 ```tsx
@@ -2208,15 +1237,15 @@ export function DetailColumn({ selectedCommit, selectedCommitDetail, workingTree
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Type-check**
 
-Run: `npx vitest run test/webview/DetailColumn.test.tsx`
-Expected: PASS
+Run: `npx tsc --noEmit`
+Expected: no errors
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/webview/columns/DetailColumn.tsx test/webview/DetailColumn.test.tsx
+git add src/webview/columns/DetailColumn.tsx
 git commit -m "feat: commit detail and working-tree stage area column"
 ```
 
@@ -2227,101 +1256,12 @@ git commit -m "feat: commit detail and working-tree stage area column"
 **Files:**
 - Modify: `src/webview/App.tsx`
 - Modify: `src/extension.ts`
-- Modify: `test/webview/App.test.tsx`
-- Modify: `test/extension.test.ts`
 
 **Interfaces:**
 - Consumes: `BranchesColumn` (Task 13), `GraphColumn` (Task 14), `DetailColumn` (Task 15), `createGitClientPanel` (Task 11), all `git/*.ts` functions and `assignLanes` (Tasks 3–8), `GitApi` (Task 10), `setGitBinaryPath` (Task 2).
 - Produces: final `App`, final `activate`.
 
-- [ ] **Step 1: Write the failing tests**
-
-`test/webview/App.test.tsx` (replace):
-```tsx
-// @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/preact';
-import { App } from '../../src/webview/App';
-
-let postMessage: ReturnType<typeof vi.fn>;
-
-beforeEach(() => {
-  postMessage = vi.fn();
-  (globalThis as any).acquireVsCodeApi = vi.fn(() => ({ postMessage, getState: vi.fn(), setState: vi.fn() }));
-});
-
-describe('App', () => {
-  it('renders all three columns and reflects a state:update message', async () => {
-    render(<App />);
-    expect(screen.getByTestId('branches-column')).toBeTruthy();
-    expect(screen.getByTestId('graph-column')).toBeTruthy();
-    expect(screen.getByTestId('detail-column')).toBeTruthy();
-
-    window.dispatchEvent(new MessageEvent('message', {
-      data: { type: 'state:update', payload: { branches: { local: [{ name: 'main', sha: '1', isHead: true }], remote: [] } } },
-    }));
-
-    await waitFor(() => expect(screen.getByTestId('select-branch-main')).toBeTruthy());
-  });
-
-  it('posts a graph:loadMore message when Load more is clicked in the graph column', () => {
-    render(<App />);
-    screen.getByTestId('load-more').click();
-    expect(postMessage).toHaveBeenCalledWith({ type: 'graph:loadMore' });
-  });
-});
-```
-
-`test/extension.test.ts` (replace):
-```ts
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as vscodeMock from './mocks/vscode';
-
-vi.mock('vscode', () => vscodeMock);
-vi.mock('../src/panel/GitClientPanel', () => ({ createGitClientPanel: vi.fn() }));
-
-import { activate } from '../src/extension';
-import { createGitClientPanel } from '../src/panel/GitClientPanel';
-
-describe('activate', () => {
-  beforeEach(() => {
-    vscodeMock.commands.registerCommand.mockClear();
-    (createGitClientPanel as any).mockClear();
-  });
-
-  it('registers the gitClient.open command', () => {
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    activate(context);
-    expect(vscodeMock.commands.registerCommand).toHaveBeenCalledWith('gitClient.open', expect.any(Function));
-  });
-
-  it('opens the panel with the first workspace folder as repoPath', () => {
-    vscodeMock.workspace.workspaceFolders = [{ uri: { fsPath: '/repo' } }];
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    activate(context);
-    const handler = vscodeMock.commands.registerCommand.mock.calls[0][1];
-    handler();
-    expect(createGitClientPanel).toHaveBeenCalledWith(context, '/repo', expect.any(Object));
-  });
-
-  it('shows an information message instead of opening a panel when no folder is open', () => {
-    vscodeMock.workspace.workspaceFolders = undefined;
-    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-    activate(context);
-    const handler = vscodeMock.commands.registerCommand.mock.calls[0][1];
-    handler();
-    expect(createGitClientPanel).not.toHaveBeenCalled();
-    expect(vscodeMock.window.showInformationMessage).toHaveBeenCalled();
-  });
-});
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `npx vitest run test/webview/App.test.tsx test/extension.test.ts`
-Expected: FAIL — `App` still renders placeholder divs (no `select-branch-main` testid reachable), `activate` does not call `createGitClientPanel`.
-
-- [ ] **Step 3: Wire the real columns and activation**
+- [ ] **Step 1: Wire the real columns and activation**
 
 `src/webview/App.tsx` (replace):
 ```tsx
@@ -2422,26 +1362,20 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {}
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 2: Type-check, build, and manually smoke-test**
 
-Run: `npx vitest run test/webview/App.test.tsx test/extension.test.ts`
-Expected: PASS
+Run: `npx tsc --noEmit && npm run build`
+Expected: no errors
 
-- [ ] **Step 5: Run the full suite, then manually smoke-test in the Extension Development Host**
+Manual check:
+1. Reload the VS Code window (`Developer: Reload Window`) if using the symlinked install, or press `F5` for the Extension Development Host.
+2. Run command "Git Client: Open" against a folder containing a git repo.
+3. Confirm all three columns render live data, clicking a branch filters the graph, clicking a commit shows its detail, and staging a file moves it from Unstaged to Staged.
+4. Repeat in a WSL2 remote window (`code --remote wsl+<distro> <path>`) to confirm cross-platform behavior per the spec's WSL2 requirement.
 
-Run: `npx vitest run`
-Expected: PASS (all prior task tests still pass)
-
-Manual check (no automated harness in V1, per Global Constraints):
-1. `npm run build`
-2. Press `F5` in VS Code to launch the Extension Development Host against a folder containing a git repo.
-3. Run command "Git Client: Open".
-4. Confirm all three columns render live data, clicking a branch filters the graph, clicking a commit shows its detail, and staging a file moves it from Unstaged to Staged.
-5. Repeat step 2–4 in a WSL2 remote window (`code --remote wsl+<distro> <path>`) to confirm cross-platform behavior per the spec's WSL2 requirement.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add src/webview/App.tsx src/extension.ts test/webview/App.test.tsx test/extension.test.ts
+git add src/webview/App.tsx src/extension.ts
 git commit -m "feat: wire real columns into App and gitApi into activation"
 ```
