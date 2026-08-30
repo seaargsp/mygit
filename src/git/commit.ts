@@ -22,6 +22,7 @@ export async function getCommitDetail(repoPath: string, sha: string): Promise<Co
     date,
     message: message.trim(),
     refs: [],
+    body: '',
     files,
   };
 }

@@ -7,6 +7,7 @@ export type CommitNode = {
   author: string;
   date: string;
   refs: string[];
+  body: string;
 };
 
 const FIELD_SEP = '\x1f';
@@ -21,7 +22,7 @@ export async function getCommitLog(
     `--skip=${opts.offset}`,
     `--max-count=${opts.limit}`,
     '--topo-order',
-    `--pretty=format:%H${FIELD_SEP}%P${FIELD_SEP}%an${FIELD_SEP}%aI${FIELD_SEP}%s${FIELD_SEP}%D${RECORD_SEP}`,
+    `--pretty=format:%H${FIELD_SEP}%P${FIELD_SEP}%an${FIELD_SEP}%aI${FIELD_SEP}%s${FIELD_SEP}%D${FIELD_SEP}%b${RECORD_SEP}`,
   ];
   args.push(...(opts.refs && opts.refs.length > 0 ? opts.refs : ['--all']));
 
@@ -31,7 +32,7 @@ export async function getCommitLog(
     .map(record => record.trim())
     .filter(Boolean)
     .map(record => {
-      const [sha, parents, author, date, message, refs] = record.split(FIELD_SEP);
+      const [sha, parents, author, date, message, refs, body] = record.split(FIELD_SEP);
       return {
         sha,
         parents: parents ? parents.split(' ').filter(Boolean) : [],
@@ -39,6 +40,7 @@ export async function getCommitLog(
         date,
         message,
         refs: refs ? refs.split(', ').filter(Boolean) : [],
+        body: body?.trim() ?? '',
       };
     });
 }

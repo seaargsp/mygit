@@ -4,6 +4,7 @@ import type { WorkingTreeStatus } from '../git/status';
 import type { CommitDetail } from '../git/commit';
 
 export type ClientState = {
+  repoName: string;
   branches: { local: BranchRef[]; remote: RemoteGroup[] };
   tags: TagRef[];
   commitLog: LaneCommit[];

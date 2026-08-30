@@ -35,6 +35,7 @@ export type Store = {
 
 export function createStore(repoPath: string, gitApi: GitApi): Store {
   let state: ClientState = {
+    repoName: repoPath.split(/[\\/]/).filter(Boolean).pop() ?? repoPath,
     branches: { local: [], remote: [] },
     tags: [],
     commitLog: [],
