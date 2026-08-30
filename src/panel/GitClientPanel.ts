@@ -63,6 +63,18 @@ export function createGitClientPanel(context: vscode.ExtensionContext, repoPath:
       case 'graph:selectRefFilter':
         await store.setRefFilter(message.payload.refs);
         return;
+      case 'file:openDiff':
+        await store.openFileDiff(message.payload);
+        return;
+      case 'file:closeDiff':
+        store.closeFileDiff();
+        return;
+      case 'file:open':
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(vscode.Uri.file(repoPath), message.payload.path));
+        return;
+      case 'clipboard:write':
+        await vscode.env.clipboard.writeText(message.payload.text);
+        return;
       case 'branch:checkout':
         await gitApi.checkoutBranch(repoPath, message.payload.ref);
         break;
@@ -71,6 +83,15 @@ export function createGitClientPanel(context: vscode.ExtensionContext, repoPath:
         break;
       case 'branch:delete':
         await gitApi.deleteBranch(repoPath, message.payload.name, message.payload.remote);
+        break;
+      case 'branch:merge':
+        await gitApi.mergeRef(repoPath, message.payload.ref);
+        break;
+      case 'tag:create':
+        await gitApi.createTag(repoPath, message.payload.name, message.payload.ref);
+        break;
+      case 'tag:delete':
+        await gitApi.deleteTag(repoPath, message.payload.name);
         break;
       case 'remote:fetch':
         await gitApi.fetch(repoPath, message.payload.remote);
@@ -93,18 +114,25 @@ export function createGitClientPanel(context: vscode.ExtensionContext, repoPath:
       case 'commit:create':
         await gitApi.commit(repoPath, message.payload.message, { amend: message.payload.amend });
         break;
-      case 'file:openConflict': {
-        const uri = vscode.Uri.file(`${repoPath}/${message.payload.path}`);
-        await vscode.commands.executeCommand('vscode.open', uri);
-        return;
-      }
+      case 'commit:revert':
+        await gitApi.revertCommit(repoPath, message.payload.sha);
+        break;
+      case 'commit:reset':
+        await gitApi.resetTo(repoPath, message.payload.sha, message.payload.mode);
+        break;
     }
     await store.refreshAll();
   }
 
   panel.webview.onDidReceiveMessage(raw => {
     const message = parseWebviewMessage(raw);
-    if (message) void handleMessage(message);
+    if (!message) return;
+    // Git refuses plenty of these operations (conflicts, unmerged paths, protected
+    // refs); the reason has to reach the user rather than an unhandled rejection.
+    void handleMessage(message).catch(async error => {
+      vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+      await store.refreshAll().catch(() => undefined);
+    });
   });
 
   panel.onDidDispose(() => {

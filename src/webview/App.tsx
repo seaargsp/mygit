@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ClientState, WebviewToExtensionMessage } from '../panel/messages';
 import { getVsCodeApi, onExtensionMessage } from './lib/vscodeApi';
+import { useSplit } from './lib/useSplit';
+import type { Ui } from './lib/ui';
+import { ContextMenu, type MenuItem, type MenuRequest } from './components/ContextMenu';
+import { Dialog, type DialogRequest } from './components/Dialog';
 import { Toolbar } from './components/Toolbar';
 import { BranchesColumn } from './columns/BranchesColumn';
 import { GraphColumn } from './columns/GraphColumn';
+import { DiffView } from './columns/DiffView';
 import { DetailColumn } from './columns/DetailColumn';
 
 const EMPTY_STATE: ClientState = {
@@ -15,12 +20,9 @@ const EMPTY_STATE: ClientState = {
   selectedCommit: 'working-tree',
   selectedCommitDetail: null,
   workingTreeStatus: { staged: [], unstaged: [], conflicted: [] },
+  openFile: null,
+  fileDiff: null,
 };
-
-const LIMITS = { sidebar: [180, 460], detail: [300, 720] } as const;
-const DEFAULT_WIDTHS = { sidebar: 260, detail: 420 };
-
-type Edge = keyof typeof DEFAULT_WIDTHS;
 
 export function useClientState(): [ClientState, (message: WebviewToExtensionMessage) => void] {
   const [state, setState] = useState<ClientState>(EMPTY_STATE);
@@ -35,100 +37,120 @@ export function useClientState(): [ClientState, (message: WebviewToExtensionMess
   return [state, dispatch];
 }
 
-/** Pane widths live in the webview's own persisted state so they survive a panel reload. */
-function usePaneWidths() {
-  const [widths, setWidths] = useState(() => {
-    const stored = getVsCodeApi().getState() as { widths?: typeof DEFAULT_WIDTHS } | undefined;
-    return { ...DEFAULT_WIDTHS, ...stored?.widths };
-  });
-  const drag = useRef<{ edge: Edge; startX: number; startWidth: number } | null>(null);
-  const [dragging, setDragging] = useState<Edge | null>(null);
+/**
+ * The diff needs the width the branches pane is holding, so opening one collapses
+ * the sidebar and closing it gives back whatever the user had.
+ */
+function useSidebarCollapse(diffOpen: boolean) {
+  const [collapsed, setCollapsed] = useState(false);
+  const auto = useRef(false);
+  const wasOpen = useRef(false);
 
   useEffect(() => {
-    getVsCodeApi().setState({ widths });
-  }, [widths]);
+    if (diffOpen && !wasOpen.current && !collapsed) {
+      setCollapsed(true);
+      auto.current = true;
+    } else if (!diffOpen && wasOpen.current && auto.current) {
+      setCollapsed(false);
+      auto.current = false;
+    }
+    wasOpen.current = diffOpen;
+  }, [diffOpen]);
 
-  function onPointerDown(edge: Edge, event: PointerEvent): void {
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    drag.current = { edge, startX: event.clientX, startWidth: widths[edge] };
-    setDragging(edge);
-  }
+  const toggle = useCallback(() => {
+    auto.current = false;
+    setCollapsed(value => !value);
+  }, []);
 
-  function onPointerMove(event: PointerEvent): void {
-    const active = drag.current;
-    if (!active) return;
-    const delta = event.clientX - active.startX;
-    const [min, max] = LIMITS[active.edge];
-    const raw = active.edge === 'sidebar' ? active.startWidth + delta : active.startWidth - delta;
-    setWidths(prev => ({ ...prev, [active.edge]: Math.max(min, Math.min(max, raw)) }));
-  }
-
-  function onPointerUp(event: PointerEvent): void {
-    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-    drag.current = null;
-    setDragging(null);
-  }
-
-  function resizeProps(edge: Edge) {
-    return {
-      class: 'splitter',
-      role: 'separator' as const,
-      'aria-orientation': 'vertical' as const,
-      'aria-label': `Resize ${edge} pane`,
-      'data-dragging': dragging === edge,
-      onPointerDown: (event: PointerEvent) => onPointerDown(edge, event),
-      onPointerMove,
-      onPointerUp,
-    };
-  }
-
-  return { widths, resizeProps };
+  return { collapsed, toggle };
 }
 
 export function App() {
   const [state, dispatch] = useClientState();
-  const { widths, resizeProps } = usePaneWidths();
+  const { sizes, splitProps } = useSplit();
+  const { collapsed, toggle } = useSidebarCollapse(state.openFile !== null);
+  const [menu, setMenu] = useState<MenuRequest | null>(null);
+  const [dialog, setDialog] = useState<DialogRequest | null>(null);
+
+  const ui: Ui = useMemo(() => ({
+    openMenu(event: MouseEvent, items: MenuItem[]) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (items.length > 0) setMenu({ x: event.clientX, y: event.clientY, items });
+    },
+    openDialog: setDialog,
+  }), []);
 
   const head = useMemo(() => state.branches.local.find(branch => branch.isHead), [state.branches.local]);
   const remoteNames = useMemo(() => state.branches.remote.map(group => group.remoteName), [state.branches.remote]);
 
   const style = {
-    '--sidebar-w': `${widths.sidebar}px`,
-    '--detail-w': `${widths.detail}px`,
+    '--sidebar-w': `${sizes.sidebar}px`,
+    '--detail-w': `${sizes.detail}px`,
+    '--detail-top-h': `${sizes.detailTop}px`,
+    '--commit-box-h': `${sizes.commitBox}px`,
   } as Record<string, string>;
 
   return (
     <div class="git-client-app" data-testid="git-client-app">
-      <Toolbar repoName={state.repoName} head={head} dispatch={dispatch} />
+      <Toolbar
+        repoName={state.repoName}
+        head={head}
+        sidebarCollapsed={collapsed}
+        onToggleSidebar={toggle}
+        ui={ui}
+        dispatch={dispatch}
+      />
 
-      <div class="panes" style={style}>
-        <BranchesColumn
-          branches={state.branches}
-          tags={state.tags}
-          selectedRefFilter={state.selectedRefFilter}
-          dispatch={dispatch}
-        />
-        <div {...resizeProps('sidebar')} />
+      <div class="panes" data-sidebar={collapsed ? 'collapsed' : 'open'} style={style}>
+        {!collapsed && (
+          <>
+            <BranchesColumn
+              branches={state.branches}
+              tags={state.tags}
+              selectedRefFilter={state.selectedRefFilter}
+              headBranch={head?.name}
+              ui={ui}
+              dispatch={dispatch}
+            />
+            <div {...splitProps('sidebar')} />
+          </>
+        )}
+
         <div class="pane pane--graph">
-          <GraphColumn
-            commitLog={state.commitLog}
-            selectedCommit={state.selectedCommit}
-            remoteNames={remoteNames}
-            workingTreeStatus={state.workingTreeStatus}
-            dispatch={dispatch}
-          />
+          {state.openFile
+            ? <DiffView openFile={state.openFile} diff={state.fileDiff} dispatch={dispatch} />
+            : (
+              <GraphColumn
+                commitLog={state.commitLog}
+                selectedCommit={state.selectedCommit}
+                remoteNames={remoteNames}
+                workingTreeStatus={state.workingTreeStatus}
+                headBranch={head?.name}
+                ui={ui}
+                dispatch={dispatch}
+              />
+            )}
         </div>
-        <div {...resizeProps('detail')} />
+
+        <div {...splitProps('detail')} />
+
         <div class="pane">
           <DetailColumn
             selectedCommit={state.selectedCommit}
             selectedCommitDetail={state.selectedCommitDetail}
             workingTreeStatus={state.workingTreeStatus}
+            openFile={state.openFile}
             headBranch={head?.name}
+            splitProps={splitProps}
+            ui={ui}
             dispatch={dispatch}
           />
         </div>
       </div>
+
+      {menu && <ContextMenu request={menu} onClose={() => setMenu(null)} />}
+      {dialog && <Dialog request={dialog} onClose={() => setDialog(null)} />}
     </div>
   );
 }

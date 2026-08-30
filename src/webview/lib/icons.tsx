@@ -15,6 +15,9 @@ const PATHS = {
   trash: 'M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 9h5.8l.6-9',
   pencil: 'M11.5 2.5 13.5 4.5 5.5 12.5 2.5 13.5 3.5 10.5 11.5 2.5',
   dot: 'M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z',
+  close: 'm4 4 8 8M12 4l-8 8',
+  sidebar: 'M2.5 3.5h11v9h-11v-9ZM6.5 3.5v9',
+  diff: 'M4 2.5v11M12 2.5v11M2 6h4M2 10h4M10 6h4M10 10h4',
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -85,20 +85,33 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .panes {
   display: grid;
   min-height: 0;
-  grid-template-columns: var(--sidebar-w, 260px) 1px 1fr 1px var(--detail-w, 420px);
+  grid-template-columns: var(--sidebar-w, 260px) 1px 1fr 1px var(--detail-w, 440px);
 }
+.panes[data-sidebar="collapsed"] { grid-template-columns: 1fr 1px var(--detail-w, 440px); }
 
 .splitter {
-  background: var(--line-soft);
-  cursor: col-resize;
   position: relative;
+  background: var(--line-soft);
+  flex: none;
 }
-.splitter::after {
+.splitter--x { cursor: col-resize; }
+.splitter--y { cursor: row-resize; height: 1px; }
+/* The grab area is wider than the hairline the eye follows. */
+.splitter--x::after { content: ""; position: absolute; inset: 0 -3px; }
+.splitter--y::after { content: ""; position: absolute; inset: -3px 0; }
+.splitter:hover, .splitter[data-dragging="true"], .splitter:focus-visible { background: var(--accent); }
+.splitter--y::before {
   content: "";
   position: absolute;
-  inset: 0 -3px;
+  left: 50%;
+  top: -1px;
+  width: 28px;
+  height: 3px;
+  margin-left: -14px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 26%, transparent);
 }
-.splitter:hover, .splitter[data-dragging="true"] { background: var(--accent); }
+.splitter--y:hover::before, .splitter--y[data-dragging="true"]::before { background: var(--accent); }
 
 .pane {
   min-width: 0;
@@ -163,20 +176,6 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   font-family: var(--font-mono);
   font-size: 9px;
   color: var(--accent);
-}
-
-.toolbar__branch-form {
-  position: absolute;
-  top: 40px;
-  right: 12px;
-  z-index: 20;
-  display: flex;
-  gap: 6px;
-  padding: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
 .field {
@@ -441,7 +440,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .sha--link { color: var(--accent); }
 .sha--link:hover { text-decoration: underline; }
 
-.detail__scroll { flex: 1; overflow-y: auto; }
+.detail__top {
+  height: var(--detail-top-h, 150px);
+  flex: none;
+  overflow-y: auto;
+}
+.detail__scroll { flex: 1; min-height: 0; overflow-y: auto; }
 
 .detail__message {
   margin: 12px;
@@ -504,6 +508,16 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   padding: 0 12px;
 }
 .file-row:hover { background: var(--surface-hover); }
+.file-row__open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  align-items: center;
+  text-align: left;
+}
+.file-row[data-active="true"] { background: var(--surface-active); }
+.file-row[data-active="true"] .file-row__name { font-weight: 600; }
 .file-row__path { display: flex; min-width: 0; align-items: baseline; }
 /* Clip the directory from the left so the deepest folder stays visible; <bdi> keeps
    the path's own left-to-right order intact inside the right-to-left overflow box. */
@@ -554,16 +568,19 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .stage-section--conflict .file-list__head { color: var(--danger); }
 
 .commit-box {
-  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  height: var(--commit-box-h, 150px);
+  flex: none;
   padding: 10px 12px 12px;
   background: var(--surface-0);
 }
 .commit-box__input {
   width: 100%;
-  min-height: 68px;
-  max-height: 220px;
+  flex: 1;
+  min-height: 0;
   padding: 8px;
-  resize: vertical;
+  resize: none;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -595,3 +612,149 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* --------------------------------------------------------------------------
+   Context menu and dialogs
+-------------------------------------------------------------------------- */
+.context-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 0.4);
+}
+
+.context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  border-radius: 2px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.context-menu__item:hover { background: var(--accent); color: #fff; }
+.context-menu__item--danger { color: var(--danger); }
+.context-menu__item--danger:hover { background: var(--danger); color: #fff; }
+
+.context-menu__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
+}
+.dialog__title { font-size: 14px; }
+.dialog__body { margin: 10px 0 0; color: var(--text-dim); line-height: 1.55; }
+.dialog__field { display: block; margin-top: 12px; }
+.dialog__label { display: block; margin-bottom: 5px; color: var(--text-dim); }
+.dialog__field .field { width: 100%; height: 28px; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+.btn--danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+.btn--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 85%, #fff); }
+
+/* --------------------------------------------------------------------------
+   Diff
+-------------------------------------------------------------------------- */
+.diff {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  --diff-add: color-mix(in srgb, var(--added) 16%, var(--surface-1));
+  --diff-add-gutter: color-mix(in srgb, var(--added) 28%, var(--surface-1));
+  --diff-del: color-mix(in srgb, var(--deleted) 16%, var(--surface-1));
+  --diff-del-gutter: color-mix(in srgb, var(--deleted) 28%, var(--surface-1));
+}
+
+.diff__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--line);
+}
+.diff__path { display: flex; align-items: baseline; min-width: 0; }
+.diff__dir { color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; }
+.diff__name { font-weight: 600; white-space: nowrap; }
+.diff__source { color: var(--text-faint); font-size: 11px; }
+.diff__stat { margin-left: auto; display: flex; gap: 8px; font-family: var(--font-mono); font-size: 11px; }
+.diff__stat-add { color: var(--added); }
+.diff__stat-del { color: var(--deleted); }
+
+.diff__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  tab-size: 4;
+}
+.diff__empty { padding: 24px 16px; color: var(--text-faint); font-family: var(--font-ui); }
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 46px 46px 16px max-content;
+  min-width: 100%;
+}
+
+.diff-gutter {
+  position: sticky;
+  padding: 0 8px;
+  text-align: right;
+  color: var(--text-faint);
+  background: var(--surface-1);
+  user-select: none;
+}
+.diff-gutter:nth-child(1) { left: 0; }
+.diff-gutter:nth-child(2) { left: 46px; box-shadow: inset -1px 0 var(--line-soft); }
+
+.diff-sign { text-align: center; user-select: none; }
+.diff-code { white-space: pre; padding-right: 16px; }
+
+.diff-row--add { background: var(--diff-add); }
+.diff-row--add .diff-gutter { background: var(--diff-add-gutter); color: var(--text-dim); }
+.diff-row--add .diff-sign { color: var(--added); }
+
+.diff-row--del { background: var(--diff-del); }
+.diff-row--del .diff-gutter { background: var(--diff-del-gutter); color: var(--text-dim); }
+.diff-row--del .diff-sign { color: var(--deleted); }
+
+.diff-row--meta .diff-code, .diff-row--meta .diff-sign { color: var(--text-faint); font-style: italic; }
+
+.diff-row--hunk {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-1));
+  color: var(--text-dim);
+}
+.diff-row--hunk .diff-gutter { background: color-mix(in srgb, var(--accent) 12%, var(--surface-1)); }
+.hunk + .hunk { border-top: 1px solid var(--line-soft); }

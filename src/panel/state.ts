@@ -1,14 +1,18 @@
-import type { ClientState } from './messages';
+import type { ClientState, OpenFile } from './messages';
 import type { BranchRef, RemoteGroup, TagRef } from '../git/refs';
 import type { LaneCommit } from '../git/graph';
 import type { WorkingTreeStatus } from '../git/status';
 import type { CommitDetail } from '../git/commit';
+import type { FileDiff } from '../git/diff';
+import type { ResetMode } from '../git/history';
 
 export type GitApi = {
   listBranches(repoPath: string): Promise<{ local: BranchRef[]; remote: RemoteGroup[] }>;
   listTags(repoPath: string): Promise<TagRef[]>;
   getCommitLog(repoPath: string, opts: { refs?: string[]; limit: number; offset: number }): Promise<LaneCommit[]>;
   getCommitDetail(repoPath: string, sha: string): Promise<CommitDetail>;
+  getCommitFileDiff(repoPath: string, sha: string, path: string): Promise<FileDiff>;
+  getWorkingFileDiff(repoPath: string, path: string, staged: boolean): Promise<FileDiff>;
   getWorkingTreeStatus(repoPath: string): Promise<WorkingTreeStatus>;
   stageFile(repoPath: string, filePath: string): Promise<void>;
   unstageFile(repoPath: string, filePath: string): Promise<void>;
@@ -17,6 +21,11 @@ export type GitApi = {
   checkoutBranch(repoPath: string, ref: string): Promise<void>;
   createBranch(repoPath: string, name: string, from: string): Promise<void>;
   deleteBranch(repoPath: string, name: string, remote: boolean): Promise<void>;
+  mergeRef(repoPath: string, ref: string): Promise<void>;
+  createTag(repoPath: string, name: string, ref: string): Promise<void>;
+  deleteTag(repoPath: string, name: string): Promise<void>;
+  revertCommit(repoPath: string, sha: string): Promise<void>;
+  resetTo(repoPath: string, sha: string, mode: ResetMode): Promise<void>;
   fetch(repoPath: string, remote?: string): Promise<void>;
   pull(repoPath: string): Promise<void>;
   push(repoPath: string, opts: { setUpstream: boolean }): Promise<void>;
@@ -31,6 +40,8 @@ export type Store = {
   selectCommit(sha: string | 'working-tree'): Promise<void>;
   loadMore(): Promise<void>;
   setRefFilter(refs: string[]): Promise<void>;
+  openFileDiff(file: OpenFile): Promise<void>;
+  closeFileDiff(): void;
 };
 
 export function createStore(repoPath: string, gitApi: GitApi): Store {
@@ -43,6 +54,8 @@ export function createStore(repoPath: string, gitApi: GitApi): Store {
     selectedCommit: 'working-tree',
     selectedCommitDetail: null,
     workingTreeStatus: { staged: [], unstaged: [], conflicted: [] },
+    openFile: null,
+    fileDiff: null,
   };
   const listeners = new Set<(state: ClientState) => void>();
 
@@ -59,15 +72,31 @@ export function createStore(repoPath: string, gitApi: GitApi): Store {
       gitApi.getWorkingTreeStatus(repoPath),
     ]);
     setState({ branches, tags, commitLog, workingTreeStatus });
+    // A working-tree diff goes stale on every stage, discard or external edit.
+    if (state.openFile && state.openFile.source !== 'commit') await openFileDiff(state.openFile);
+  }
+
+  async function openFileDiff(file: OpenFile): Promise<void> {
+    setState({ openFile: file });
+    const diff = file.source === 'commit'
+      ? await gitApi.getCommitFileDiff(repoPath, file.sha, file.path)
+      : await gitApi.getWorkingFileDiff(repoPath, file.path, file.source === 'staged');
+    setState({ fileDiff: diff });
+  }
+
+  function closeFileDiff(): void {
+    setState({ openFile: null, fileDiff: null });
   }
 
   async function selectCommit(sha: string | 'working-tree'): Promise<void> {
+    // The open diff belongs to the commit being left behind.
     if (sha === 'working-tree') {
-      setState({ selectedCommit: sha, selectedCommitDetail: null });
+      setState({ selectedCommit: sha, selectedCommitDetail: null, openFile: null, fileDiff: null });
       return;
     }
+    setState({ selectedCommit: sha, selectedCommitDetail: null, openFile: null, fileDiff: null });
     const detail = await gitApi.getCommitDetail(repoPath, sha);
-    setState({ selectedCommit: sha, selectedCommitDetail: detail });
+    setState({ selectedCommitDetail: detail });
   }
 
   async function loadMore(): Promise<void> {
@@ -95,5 +124,7 @@ export function createStore(repoPath: string, gitApi: GitApi): Store {
     selectCommit,
     loadMore,
     setRefFilter,
+    openFileDiff,
+    closeFileDiff,
   };
 }

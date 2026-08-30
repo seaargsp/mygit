@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { createGitClientPanel } from './panel/GitClientPanel';
 import { setGitBinaryPath } from './git/gitService';
-import { listBranches, listTags } from './git/refs';
+import { listBranches, listTags, createTag, deleteTag } from './git/refs';
 import { getCommitLog, assignLanes } from './git/graph';
 import { getCommitDetail, commit } from './git/commit';
+import { getCommitFileDiff, getWorkingFileDiff } from './git/diff';
+import { revertCommit, resetTo, mergeRef } from './git/history';
 import { getWorkingTreeStatus, stageFile, unstageFile, discardFile } from './git/status';
 import { checkoutBranch, createBranch, deleteBranch, fetch, pull, push } from './git/remote';
 import type { GitApi } from './panel/state';
@@ -13,6 +15,8 @@ const gitApi: GitApi = {
   listTags,
   getCommitLog: async (repoPath, opts) => assignLanes(await getCommitLog(repoPath, opts)),
   getCommitDetail,
+  getCommitFileDiff,
+  getWorkingFileDiff,
   getWorkingTreeStatus,
   stageFile,
   unstageFile,
@@ -21,6 +25,11 @@ const gitApi: GitApi = {
   checkoutBranch,
   createBranch,
   deleteBranch,
+  mergeRef,
+  createTag,
+  deleteTag,
+  revertCommit,
+  resetTo,
   fetch,
   pull,
   push,

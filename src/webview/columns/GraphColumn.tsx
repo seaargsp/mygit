@@ -1,7 +1,10 @@
 import { useMemo, useRef } from 'preact/hooks';
+import type { LaneCommit } from '../../git/graph';
 import type { ClientState, WebviewToExtensionMessage } from '../../panel/messages';
+import type { MenuItem } from '../components/ContextMenu';
+import type { Ui } from '../lib/ui';
 import { Icon } from '../lib/icons';
-import { fullDate, parseRefs, relativeDate, type ParsedRef } from '../lib/format';
+import { fullDate, parseRefs, relativeDate, shortSha, type ParsedRef } from '../lib/format';
 import { GraphRail, LANE_WIDTH, ROW_HEIGHT } from './GraphRail';
 
 type Props = {
@@ -9,13 +12,15 @@ type Props = {
   selectedCommit: ClientState['selectedCommit'];
   remoteNames: string[];
   workingTreeStatus: ClientState['workingTreeStatus'];
+  headBranch: string | undefined;
+  ui: Ui;
   dispatch: (message: WebviewToExtensionMessage) => void;
 };
 
 const REFS_WIDTH = 172;
 const MAX_PILLS = 3;
 
-export function GraphColumn({ commitLog, selectedCommit, remoteNames, workingTreeStatus, dispatch }: Props) {
+export function GraphColumn({ commitLog, selectedCommit, remoteNames, workingTreeStatus, headBranch, ui, dispatch }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
 
   const headIndex = useMemo(
@@ -33,6 +38,84 @@ export function GraphColumn({ commitLog, selectedCommit, remoteNames, workingTre
   function select(sha: string | 'working-tree'): void {
     dispatch({ type: 'graph:selectCommit', payload: { sha } });
   }
+
+  function commitMenu(commit: LaneCommit): MenuItem[] {
+    const short = shortSha(commit.sha);
+    const reset = (mode: 'soft' | 'mixed' | 'hard'): void => {
+      dispatch({ type: 'commit:reset', payload: { sha: commit.sha, mode } });
+    };
+    const items: MenuItem[] = [
+      { kind: 'item', label: 'Copy commit SHA', onSelect: () => copy(commit.sha) },
+      { kind: 'item', label: 'Copy commit message', onSelect: () => copy(commit.message) },
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: `Check out ${short}`,
+        onSelect: () => dispatch({ type: 'branch:checkout', payload: { ref: commit.sha } }),
+      },
+      {
+        kind: 'item',
+        label: 'Create branch here…',
+        onSelect: () => ui.openDialog({
+          kind: 'prompt',
+          title: 'Create branch',
+          label: `Branch off ${short}`,
+          placeholder: 'feature/short-name',
+          confirmLabel: 'Create branch',
+          onConfirm: name => dispatch({ type: 'branch:create', payload: { name, from: commit.sha } }),
+        }),
+      },
+      {
+        kind: 'item',
+        label: 'Create tag here…',
+        onSelect: () => ui.openDialog({
+          kind: 'prompt',
+          title: 'Create tag',
+          label: `Tag ${short}`,
+          placeholder: 'v1.0.0',
+          confirmLabel: 'Create tag',
+          onConfirm: name => dispatch({ type: 'tag:create', payload: { name, ref: commit.sha } }),
+        }),
+      },
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: 'Revert this commit',
+        onSelect: () => ui.openDialog({
+          kind: 'confirm',
+          title: 'Revert commit',
+          body: `A new commit will undo the changes in ${short}. The history is kept.`,
+          confirmLabel: 'Revert',
+          onConfirm: () => dispatch({ type: 'commit:revert', payload: { sha: commit.sha } }),
+        }),
+      },
+    ];
+
+    if (headBranch) {
+      items.push(
+        { kind: 'separator' },
+        { kind: 'item', label: `Reset ${headBranch} to here, keep staged`, onSelect: () => reset('soft') },
+        { kind: 'item', label: `Reset ${headBranch} to here, keep working tree`, onSelect: () => reset('mixed') },
+        {
+          kind: 'item',
+          label: `Reset ${headBranch} to here, discard changes`,
+          danger: true,
+          onSelect: () => ui.openDialog({
+            kind: 'confirm',
+            title: 'Hard reset',
+            body: `${headBranch} moves to ${short} and every uncommitted change is discarded. This cannot be undone.`,
+            confirmLabel: 'Discard and reset',
+            danger: true,
+            onConfirm: () => reset('hard'),
+          }),
+        },
+      );
+    }
+
+    return items;
+  }
+
+  const copy = (text: string) => dispatch({ type: 'clipboard:write', payload: { text } });
 
   function onKeyDown(event: KeyboardEvent): void {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -94,6 +177,10 @@ export function GraphColumn({ commitLog, selectedCommit, remoteNames, workingTre
               role="option"
               aria-selected={selectedCommit === commit.sha}
               onClick={() => select(commit.sha)}
+              onContextMenu={event => {
+                select(commit.sha);
+                ui.openMenu(event, commitMenu(commit));
+              }}
             >
               <div class="commit-row__refs">
                 <RefPills refs={commit.refs} remoteNames={remoteNames} />

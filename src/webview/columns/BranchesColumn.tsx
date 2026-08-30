@@ -1,16 +1,20 @@
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
 import type { ClientState, WebviewToExtensionMessage } from '../../panel/messages';
+import type { MenuItem } from '../components/ContextMenu';
+import type { Ui } from '../lib/ui';
 import { Icon, type IconName } from '../lib/icons';
 
 type Props = {
   branches: ClientState['branches'];
   tags: ClientState['tags'];
   selectedRefFilter: string[];
+  headBranch: string | undefined;
+  ui: Ui;
   dispatch: (message: WebviewToExtensionMessage) => void;
 };
 
-export function BranchesColumn({ branches, tags, selectedRefFilter, dispatch }: Props) {
+export function BranchesColumn({ branches, tags, selectedRefFilter, headBranch, ui, dispatch }: Props) {
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -20,6 +24,114 @@ export function BranchesColumn({ branches, tags, selectedRefFilter, dispatch }: 
   /** Selecting the active ref again clears the filter, so the full graph is one click away. */
   function toggleFilter(ref: string): void {
     dispatch({ type: 'graph:selectRefFilter', payload: { refs: isActive(ref) ? [] : [ref] } });
+  }
+
+  const copy = (text: string) => dispatch({ type: 'clipboard:write', payload: { text } });
+
+  function checkoutItem(ref: string): MenuItem {
+    return { kind: 'item', label: `Check out ${ref}`, onSelect: () => dispatch({ type: 'branch:checkout', payload: { ref } }) };
+  }
+
+  function mergeItem(ref: string): MenuItem[] {
+    if (!headBranch || ref === headBranch) return [];
+    return [{
+      kind: 'item',
+      label: `Merge ${ref} into ${headBranch}`,
+      onSelect: () => ui.openDialog({
+        kind: 'confirm',
+        title: 'Merge branch',
+        body: `${ref} will be merged into ${headBranch}. Conflicts are left in the working tree to resolve.`,
+        confirmLabel: 'Merge',
+        onConfirm: () => dispatch({ type: 'branch:merge', payload: { ref } }),
+      }),
+    }];
+  }
+
+  function createBranchItem(from: string, suggested: string): MenuItem {
+    return {
+      kind: 'item',
+      label: 'Create branch here…',
+      onSelect: () => ui.openDialog({
+        kind: 'prompt',
+        title: 'Create branch',
+        label: `Branch off ${from}`,
+        value: suggested,
+        confirmLabel: 'Create branch',
+        onConfirm: name => dispatch({ type: 'branch:create', payload: { name, from } }),
+      }),
+    };
+  }
+
+  function localBranchMenu(name: string, isHead: boolean): MenuItem[] {
+    return [
+      ...(isHead ? [] : [checkoutItem(name)]),
+      ...mergeItem(name),
+      createBranchItem(name, ''),
+      { kind: 'separator' },
+      { kind: 'item', label: 'Copy branch name', onSelect: () => copy(name) },
+      ...(isHead ? [] : [
+        { kind: 'separator' } as MenuItem,
+        {
+          kind: 'item',
+          label: 'Delete branch',
+          danger: true,
+          onSelect: () => ui.openDialog({
+            kind: 'confirm',
+            title: 'Delete branch',
+            body: `${name} will be deleted locally, including commits it alone points to.`,
+            confirmLabel: 'Delete branch',
+            danger: true,
+            onConfirm: () => dispatch({ type: 'branch:delete', payload: { name, remote: false } }),
+          }),
+        } as MenuItem,
+      ]),
+    ];
+  }
+
+  function remoteBranchMenu(qualified: string, shortName: string): MenuItem[] {
+    return [
+      createBranchItem(qualified, shortName),
+      ...mergeItem(qualified),
+      { kind: 'separator' },
+      { kind: 'item', label: 'Copy branch name', onSelect: () => copy(qualified) },
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: 'Delete branch on remote',
+        danger: true,
+        onSelect: () => ui.openDialog({
+          kind: 'confirm',
+          title: 'Delete remote branch',
+          body: `${qualified} will be deleted on the remote for everyone.`,
+          confirmLabel: 'Delete on remote',
+          danger: true,
+          onConfirm: () => dispatch({ type: 'branch:delete', payload: { name: qualified, remote: true } }),
+        }),
+      },
+    ];
+  }
+
+  function tagMenu(name: string): MenuItem[] {
+    return [
+      checkoutItem(name),
+      createBranchItem(name, ''),
+      { kind: 'separator' },
+      { kind: 'item', label: 'Copy tag name', onSelect: () => copy(name) },
+      { kind: 'separator' },
+      {
+        kind: 'item',
+        label: 'Delete tag',
+        danger: true,
+        onSelect: () => ui.openDialog({
+          kind: 'confirm',
+          title: 'Delete tag',
+          body: `${name} will be deleted locally. Remotes keep their copy until it is pushed.`,
+          confirmLabel: 'Delete tag',
+          danger: true,
+          onConfirm: () => dispatch({ type: 'tag:delete', payload: { name } }),
+        }),
+      },
+    ];
   }
 
   const localBranches = branches.local.filter(branch => matches(branch.name));
@@ -47,6 +159,7 @@ export function BranchesColumn({ branches, tags, selectedRefFilter, dispatch }: 
               class={`ref-row${branch.isHead ? ' ref-row--head' : ''}`}
               data-active={isActive(branch.name)}
               data-testid={`local-branch-${branch.name}`}
+              onContextMenu={event => ui.openMenu(event, localBranchMenu(branch.name, branch.isHead))}
             >
               <button
                 class="ref-row__label"
@@ -96,6 +209,7 @@ export function BranchesColumn({ branches, tags, selectedRefFilter, dispatch }: 
                     class="ref-row"
                     data-active={isActive(qualified)}
                     data-testid={`remote-branch-${group.remoteName}-${branch.name}`}
+                    onContextMenu={event => ui.openMenu(event, remoteBranchMenu(qualified, branch.name))}
                   >
                     <button
                       class="ref-row__label"
@@ -126,7 +240,13 @@ export function BranchesColumn({ branches, tags, selectedRefFilter, dispatch }: 
 
         <Section id="tags" title="Tags" icon="tag" count={visibleTags.length} collapsed={collapsed} setCollapsed={setCollapsed}>
           {visibleTags.map(tag => (
-            <li key={tag.name} class="ref-row" data-active={isActive(tag.name)} data-testid={`tag-${tag.name}`}>
+            <li
+              key={tag.name}
+              class="ref-row"
+              data-active={isActive(tag.name)}
+              data-testid={`tag-${tag.name}`}
+              onContextMenu={event => ui.openMenu(event, tagMenu(tag.name))}
+            >
               <button
                 class="ref-row__label"
                 aria-pressed={isActive(tag.name)}

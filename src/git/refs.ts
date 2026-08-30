@@ -40,3 +40,11 @@ export async function listTags(repoPath: string): Promise<TagRef[]> {
     return { name, sha };
   });
 }
+
+export async function createTag(repoPath: string, name: string, ref: string): Promise<void> {
+  await runGit(repoPath, ['tag', name, ref]);
+}
+
+export async function deleteTag(repoPath: string, name: string): Promise<void> {
+  await runGit(repoPath, ['tag', '-d', name]);
+}
