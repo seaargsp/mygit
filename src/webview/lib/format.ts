@@ -1,3 +1,5 @@
+import type { Prefs } from '../../panel/messages';
+
 export const LANE_COUNT = 8;
 
 export function laneColor(lane: number): string {
@@ -12,10 +14,25 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-/** Relative for the last week, absolute beyond it: recent work is read by age, old work by date. */
+let datePrefs: Pick<Prefs, 'dateFormat' | 'dateLocale'> = { dateFormat: 'relative', dateLocale: '' };
+
+/** Date/Time Locale and Format preferences, set by the shell from the extension settings. */
+export function setDatePrefs(prefs: Pick<Prefs, 'dateFormat' | 'dateLocale'>): void {
+  datePrefs = prefs;
+}
+
+function locale(): string | undefined {
+  return datePrefs.dateLocale || undefined;
+}
+
+/** Graph date: relative for the last week (when the format is relative), absolute beyond it. */
 export function relativeDate(iso: string, now = Date.now()): string {
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return '';
+  if (datePrefs.dateFormat === 'iso') return iso.slice(0, 16).replace('T', ' ');
+  if (datePrefs.dateFormat === 'locale') {
+    return new Date(time).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' });
+  }
   const age = now - time;
   if (age < MINUTE) return 'just now';
   if (age < HOUR) return `${Math.floor(age / MINUTE)}m ago`;
@@ -23,7 +40,7 @@ export function relativeDate(iso: string, now = Date.now()): string {
   if (age < 7 * DAY) return `${Math.floor(age / DAY)}d ago`;
   const date = new Date(time);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(locale(), {
     month: 'short',
     day: 'numeric',
     ...(sameYear ? {} : { year: 'numeric' }),
@@ -33,13 +50,14 @@ export function relativeDate(iso: string, now = Date.now()): string {
 export function fullDate(iso: string): string {
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  if (datePrefs.dateFormat === 'iso') return iso;
+  return new Date(time).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export type ParsedRef =
   | { kind: 'head'; label: string }
   | { kind: 'local'; label: string }
-  | { kind: 'remote'; label: string }
+  | { kind: 'remote'; label: string; remote: string; branch: string }
   | { kind: 'tag'; label: string };
 
 /**
@@ -57,13 +75,17 @@ export function parseRefs(refs: string[], remoteNames: string[]): ParsedRef[] {
       parsed.push({ kind: 'head', label: ref.slice(8) });
     } else if (ref === 'HEAD') {
       parsed.push({ kind: 'head', label: 'HEAD' });
-    } else if (remoteNames.some(remote => ref.startsWith(`${remote}/`))) {
-      parsed.push({ kind: 'remote', label: ref });
     } else {
-      parsed.push({ kind: 'local', label: ref });
+      const remote = remoteNames.find(name => ref.startsWith(`${name}/`));
+      if (remote) {
+        if (ref.slice(remote.length + 1) === 'HEAD') continue;
+        parsed.push({ kind: 'remote', label: ref, remote, branch: ref.slice(remote.length + 1) });
+      } else {
+        parsed.push({ kind: 'local', label: ref });
+      }
     }
   }
-  const rank = { head: 0, local: 1, tag: 2, remote: 3 };
+  const rank = { head: 0, local: 1, remote: 2, tag: 3 };
   return parsed.sort((a, b) => rank[a.kind] - rank[b.kind]);
 }
 
@@ -84,4 +106,8 @@ export function avatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) | 0;
   return `hsl(${Math.abs(hash) % 360} 42% 42%)`;
+}
+
+export function plural(count: number, one: string, many = `${one}s`): string {
+  return `${count} ${count === 1 ? one : many}`;
 }

@@ -1,16 +1,8 @@
 import * as vscode from 'vscode';
-import { createStore, type GitApi } from './state';
-import { parseWebviewMessage, type ExtensionToWebviewMessage, type WebviewToExtensionMessage } from './messages';
+import type { ExtensionToWebviewMessage, WebviewAction, WebviewToExtensionMessage } from './messages';
+import { parseWebviewMessage } from './messages';
 
-const DEBOUNCE_MS = 150;
-export const GIT_CLIENT_VIEW_TYPE = 'gitClient';
-
-// Panels attached in this extension host; the dev build watcher reloads their HTML.
-const openPanels = new Set<() => void>();
-
-export function reloadGitClientPanels(): void {
-  for (const reload of openPanels) reload();
-}
+export const GIT_CLIENT_VIEW_TYPE = 'mygit.client';
 
 function getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
   return { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'webview-dist')] };
@@ -27,9 +19,9 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https://www.gravatar.com data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
   <link rel="stylesheet" href="${asset('index.css')}" />
-  <title>Git Client</title>
+  <title>mygit</title>
 </head>
 <body>
   <div id="root"></div>
@@ -38,142 +30,61 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 </html>`;
 }
 
-export function createGitClientPanel(context: vscode.ExtensionContext, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
-  const panel = vscode.window.createWebviewPanel(
-    GIT_CLIENT_VIEW_TYPE,
-    'Git Client',
-    vscode.ViewColumn.One,
-    { ...getWebviewOptions(context.extensionUri), retainContextWhenHidden: true }
-  );
-  return attachGitClientPanel(context, panel, repoPath, gitApi);
-}
+export type PanelHandlers = {
+  onMessage(message: WebviewToExtensionMessage): void;
+  /** The webview document (re)loaded and needs the full state. */
+  onReady(): void;
+  onDispose(): void;
+};
 
-// Restored panels (window reload, extension host restart) arrive without options or HTML.
-export function restoreGitClientPanel(context: vscode.ExtensionContext, panel: vscode.WebviewPanel, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
-  panel.webview.options = getWebviewOptions(context.extensionUri);
-  return attachGitClientPanel(context, panel, repoPath, gitApi);
-}
-
-function attachGitClientPanel(context: vscode.ExtensionContext, panel: vscode.WebviewPanel, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
-  panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
-
-  const store = createStore(repoPath, gitApi);
-  const unsubscribeStore = store.subscribe(state => {
-    const message: ExtensionToWebviewMessage = { type: 'state:update', payload: state };
-    panel.webview.postMessage(message);
-  });
-
-  let debounceHandle: ReturnType<typeof setTimeout> | undefined;
-  function scheduleRefresh(): void {
-    if (debounceHandle) clearTimeout(debounceHandle);
-    debounceHandle = setTimeout(() => void store.refreshAll(), DEBOUNCE_MS);
-  }
-
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(repoPath, '.git/{HEAD,index,refs/**}')
-  );
-  watcher.onDidChange(scheduleRefresh);
-  watcher.onDidCreate(scheduleRefresh);
-  watcher.onDidDelete(scheduleRefresh);
-
-  async function handleMessage(message: WebviewToExtensionMessage): Promise<void> {
-    switch (message.type) {
-      case 'graph:selectCommit':
-        await store.selectCommit(message.payload.sha);
-        return;
-      case 'graph:loadMore':
-        await store.loadMore();
-        return;
-      case 'graph:selectRefFilter':
-        await store.setRefFilter(message.payload.refs);
-        return;
-      case 'file:openDiff':
-        await store.openFileDiff(message.payload);
-        return;
-      case 'file:closeDiff':
-        store.closeFileDiff();
-        return;
-      case 'file:open':
-        await vscode.commands.executeCommand('vscode.open', vscode.Uri.joinPath(vscode.Uri.file(repoPath), message.payload.path));
-        return;
-      case 'clipboard:write':
-        await vscode.env.clipboard.writeText(message.payload.text);
-        return;
-      case 'branch:checkout':
-        await gitApi.checkoutBranch(repoPath, message.payload.ref);
-        break;
-      case 'branch:create':
-        await gitApi.createBranch(repoPath, message.payload.name, message.payload.from);
-        break;
-      case 'branch:delete':
-        await gitApi.deleteBranch(repoPath, message.payload.name, message.payload.remote);
-        break;
-      case 'branch:merge':
-        await gitApi.mergeRef(repoPath, message.payload.ref);
-        break;
-      case 'tag:create':
-        await gitApi.createTag(repoPath, message.payload.name, message.payload.ref);
-        break;
-      case 'tag:delete':
-        await gitApi.deleteTag(repoPath, message.payload.name);
-        break;
-      case 'remote:fetch':
-        await gitApi.fetch(repoPath, message.payload.remote);
-        break;
-      case 'remote:pull':
-        await gitApi.pull(repoPath);
-        break;
-      case 'remote:push':
-        await gitApi.push(repoPath, message.payload);
-        break;
-      case 'stage:file':
-        await gitApi.stageFile(repoPath, message.payload.path);
-        break;
-      case 'stage:unfile':
-        await gitApi.unstageFile(repoPath, message.payload.path);
-        break;
-      case 'stage:discard':
-        await gitApi.discardFile(repoPath, message.payload.path);
-        break;
-      case 'commit:create':
-        await gitApi.commit(repoPath, message.payload.message, { amend: message.payload.amend });
-        break;
-      case 'commit:revert':
-        await gitApi.revertCommit(repoPath, message.payload.sha);
-        break;
-      case 'commit:reset':
-        await gitApi.resetTo(repoPath, message.payload.sha, message.payload.mode);
-        break;
-    }
-    await store.refreshAll();
-  }
-
-  panel.webview.onDidReceiveMessage(raw => {
-    const message = parseWebviewMessage(raw);
-    if (!message) return;
-    // Git refuses plenty of these operations (conflicts, unmerged paths, protected
-    // refs); the reason has to reach the user rather than an unhandled rejection.
-    void handleMessage(message).catch(async error => {
-      vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
-      await store.refreshAll().catch(() => undefined);
+/** The client UI: one editor-area webview panel per window. */
+export class ClientPanel {
+  private constructor(
+    readonly panel: vscode.WebviewPanel,
+    private readonly extensionUri: vscode.Uri,
+    handlers: PanelHandlers
+  ) {
+    panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'mygit.svg');
+    panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
+    panel.webview.onDidReceiveMessage(raw => {
+      const message = parseWebviewMessage(raw);
+      if (!message) return;
+      if (message.type === 'ready') handlers.onReady();
+      else handlers.onMessage(message);
     });
-  });
-
-  // A fresh document starts from EMPTY_STATE, so the full state is pushed again.
-  function reload(): void {
-    panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
-    void store.refreshAll();
+    panel.onDidDispose(() => handlers.onDispose());
   }
-  openPanels.add(reload);
 
-  panel.onDidDispose(() => {
-    openPanels.delete(reload);
-    unsubscribeStore();
-    watcher.dispose();
-    if (debounceHandle) clearTimeout(debounceHandle);
-  });
+  static create(extensionUri: vscode.Uri, title: string, handlers: PanelHandlers): ClientPanel {
+    const panel = vscode.window.createWebviewPanel(
+      GIT_CLIENT_VIEW_TYPE,
+      title,
+      { viewColumn: vscode.ViewColumn.One, preserveFocus: false },
+      { ...getWebviewOptions(extensionUri), retainContextWhenHidden: true }
+    );
+    return new ClientPanel(panel, extensionUri, handlers);
+  }
 
-  void store.refreshAll();
+  /** Restored panels (window reload, extension host restart) arrive without options or HTML. */
+  static restore(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, handlers: PanelHandlers): ClientPanel {
+    panel.webview.options = getWebviewOptions(extensionUri);
+    return new ClientPanel(panel, extensionUri, handlers);
+  }
 
-  return panel;
+  post(message: ExtensionToWebviewMessage): void {
+    void this.panel.webview.postMessage(message);
+  }
+
+  action(action: WebviewAction): void {
+    this.post({ type: 'action', payload: { action } });
+  }
+
+  reveal(): void {
+    this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One, false);
+  }
+
+  /** Reloads the document; the webview asks for the full state again when it starts. */
+  reload(): void {
+    this.panel.webview.html = getWebviewHtml(this.panel.webview, this.extensionUri);
+  }
 }

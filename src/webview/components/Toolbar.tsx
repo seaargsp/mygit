@@ -1,38 +1,57 @@
-import type { BranchRef } from '../../git/refs';
-import type { WebviewToExtensionMessage } from '../../panel/messages';
-import type { Ui } from '../lib/ui';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { Ref } from 'preact';
+import type { PullMode } from '../../panel/messages';
+import type { Ctx } from '../lib/ui';
 import { Icon, type IconName } from '../lib/icons';
+import { NONE, createBranchAt, pushFlow, send, sparseDialog } from '../lib/actions';
+import { ConflictIndicator } from './ConflictIndicator';
+import { isMac } from '../lib/events';
 
 type Props = {
-  repoName: string;
-  head: BranchRef | undefined;
-  sidebarCollapsed: boolean;
-  onToggleSidebar: () => void;
-  ui: Ui;
-  dispatch: (message: WebviewToExtensionMessage) => void;
+  ctx: Ctx;
+  leftCollapsed: boolean;
+  onToggleLeft: () => void;
+  detailCollapsed: boolean;
+  onToggleDetail: () => void;
+  search: SearchProps;
+  wipLabel: string;
 };
 
-export function Toolbar({ repoName, head, sidebarCollapsed, onToggleSidebar, ui, dispatch }: Props) {
-  function createBranch(): void {
-    const from = head?.name ?? 'HEAD';
-    ui.openDialog({
-      kind: 'prompt',
-      title: 'Create branch',
-      label: `Branch off ${from}`,
-      placeholder: 'feature/short-name',
-      confirmLabel: 'Create branch',
-      onConfirm: name => dispatch({ type: 'branch:create', payload: { name, from } }),
-    });
-  }
+export type SearchProps = {
+  query: string;
+  setQuery: (query: string) => void;
+  count: number;
+  index: number;
+  step: (delta: 1 | -1) => void;
+  inputRef: Ref<HTMLInputElement>;
+};
+
+const PULL_MODES: { mode: PullMode; label: string }[] = [
+  { mode: 'fetch', label: 'Fetch All' },
+  { mode: 'ff', label: 'Pull (fast-forward if possible)' },
+  { mode: 'ff-only', label: 'Pull (fast-forward only)' },
+  { mode: 'rebase', label: 'Pull (rebase)' },
+];
+
+const mod = isMac ? '⌘' : 'Ctrl+';
+
+export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onToggleDetail, search, wipLabel }: Props) {
+  const { state } = ctx;
+  const { head, undo, repo, prefs, stashes } = state;
+  const [pullOpen, setPullOpen] = useState(false);
+  const [lfsOpen, setLfsOpen] = useState(false);
+  const labels = prefs.showToolbarLabels;
+  const defaultPull = PULL_MODES.find(entry => entry.mode === state.repoPrefs.defaultPull) ?? PULL_MODES[1];
+  const dirty = state.workingTreeStatus.staged.length + state.workingTreeStatus.unstaged.length > 0;
 
   return (
-    <header class="toolbar">
+    <header class={`toolbar${labels ? '' : ' toolbar--compact'}`}>
       <button
         class="icon-btn"
-        aria-pressed={!sidebarCollapsed}
-        aria-label={sidebarCollapsed ? 'Show the branches pane' : 'Hide the branches pane'}
-        title={sidebarCollapsed ? 'Show branches' : 'Hide branches'}
-        onClick={onToggleSidebar}
+        aria-pressed={!leftCollapsed}
+        aria-label={leftCollapsed ? 'Show the Left Panel' : 'Hide the Left Panel'}
+        title={`${leftCollapsed ? 'Show' : 'Hide'} Left Panel (${mod}J)`}
+        onClick={onToggleLeft}
       >
         <Icon name="sidebar" size={16} />
       </button>
@@ -40,38 +59,194 @@ export function Toolbar({ repoName, head, sidebarCollapsed, onToggleSidebar, ui,
       <div class="toolbar__context">
         <span class="context-field">
           <span class="context-field__label">Repository</span>
-          <span class="context-field__value" title={repoName}>{repoName || '—'}</span>
+          <span class="context-field__value" title={state.repoName}>{state.repoName || '…'}</span>
         </span>
         <span class="context-sep"><Icon name="chevron" size={12} /></span>
         <span class="context-field">
           <span class="context-field__label">Branch</span>
-          <span class="context-field__value" title={head?.name}>{head?.name ?? 'detached HEAD'}</span>
+          <span class="context-field__value" title={head.branch ?? head.sha ?? ''}>
+            {head.branch ?? (head.sha ? `HEAD ${head.sha.slice(0, 7)}` : 'no commits')}
+          </span>
         </span>
       </div>
 
       <div class="toolbar__actions">
-        <ToolButton icon="sync" label="Fetch" onClick={() => dispatch({ type: 'remote:fetch', payload: {} })} />
-        <ToolButton icon="down" label="Pull" onClick={() => dispatch({ type: 'remote:pull' })} />
-        <ToolButton
-          icon="up"
-          label="Push"
-          note={head && !head.upstream ? 'set upstream' : undefined}
-          onClick={() => dispatch({ type: 'remote:push', payload: { setUpstream: !head?.upstream } })}
-        />
-        <ToolButton icon="plus" label="Branch" onClick={createBranch} />
+        <div class="toolbar__group">
+          <ToolButton icon="undo" label="Undo" labels={labels} disabled={!undo.undo} title={undo.undo ? `Undo ${undo.undo} (${mod}Z)` : 'Nothing to undo'} onClick={() => send(ctx, 'undo', NONE)} />
+          <ToolButton icon="redo" label="Redo" labels={labels} disabled={!undo.redo} title={undo.redo ? `Redo ${undo.redo} (${mod}Y)` : 'Nothing to redo'} onClick={() => send(ctx, 'redo', NONE)} />
+        </div>
+
+        <div class="toolbar__group">
+          <div class="split-btn">
+            <ToolButton
+              icon="down"
+              label="Pull"
+              labels={labels}
+              badge={head.behind > 0 ? `↓${head.behind}` : undefined}
+              title={`${defaultPull.label} (default)`}
+              onClick={() => send(ctx, 'remote:pull', { mode: defaultPull.mode })}
+            />
+            <button class="split-btn__toggle" aria-label="Pull options" aria-expanded={pullOpen} onClick={() => setPullOpen(open => !open)}>
+              <Icon name="chevronDown" size={10} />
+            </button>
+            {pullOpen && (
+              <Popover onClose={() => setPullOpen(false)}>
+                {PULL_MODES.map(entry => (
+                  <div class="pull-menu__row" key={entry.mode}>
+                    <button
+                      class="pull-menu__label"
+                      onClick={() => {
+                        setPullOpen(false);
+                        send(ctx, 'remote:pull', { mode: entry.mode });
+                      }}
+                    >
+                      <span class="context-menu__check">{entry.mode === defaultPull.mode ? '✓' : ''}</span>
+                      {entry.label}
+                      {entry.mode === 'fetch' && <span class="context-menu__hint">{mod}L</span>}
+                    </button>
+                    <button
+                      class={`pull-menu__star${entry.mode === defaultPull.mode ? ' pull-menu__star--on' : ''}`}
+                      title="Set as default"
+                      aria-label={`Set ${entry.label} as the default`}
+                      onClick={() => send(ctx, 'remote:setDefaultPull', { mode: entry.mode })}
+                    >
+                      <Icon name="star" size={12} filled={entry.mode === defaultPull.mode} />
+                    </button>
+                  </div>
+                ))}
+              </Popover>
+            )}
+          </div>
+          <ToolButton
+            icon="up"
+            label="Push"
+            labels={labels}
+            badge={head.ahead > 0 ? `↑${head.ahead}` : head.branch && !head.upstream ? 'new' : undefined}
+            title={head.upstream ? `Push ${head.branch} to ${head.upstream}` : 'Push (creates the upstream)'}
+            onClick={() => pushFlow(ctx)}
+          />
+        </div>
+
+        <div class="toolbar__group">
+          <ToolButton icon="branch" label="Branch" labels={labels} disabled={!head.sha} title={`Create a branch at HEAD (${mod}B)`} onClick={() => head.sha && createBranchAt(ctx, head.sha)} />
+        </div>
+
+        <div class="toolbar__group">
+          <ToolButton icon="stash" label="Stash" labels={labels} disabled={!dirty} title="Stash all uncommitted changes" onClick={() => send(ctx, 'stash:save', { message: wipLabel || undefined })} />
+          <ToolButton icon="pop" label="Pop" labels={labels} disabled={stashes.length === 0} title={stashes[0] ? `Pop "${stashes[0].message}"` : 'No stashes'} onClick={() => send(ctx, 'stash:pop', {})} />
+        </div>
+
+        {(repo?.lfs || repo?.sparse.enabled) && (
+          <div class="toolbar__group">
+            {repo?.lfs && (
+              <div class="split-btn">
+                <ToolButton icon="box" label="LFS" labels={labels} title="Git LFS" onClick={() => setLfsOpen(open => !open)} />
+                {lfsOpen && (
+                  <Popover onClose={() => setLfsOpen(false)}>
+                    {(['pull', 'fetch', 'prune'] as const).map(action => (
+                      <button key={action} class="pull-menu__label" onClick={() => { setLfsOpen(false); send(ctx, 'lfs:run', { action }); }}>
+                        <span class="context-menu__check" />LFS {action}
+                      </button>
+                    ))}
+                  </Popover>
+                )}
+              </div>
+            )}
+            {repo?.sparse.enabled && <ToolButton icon="filter" label="Sparse" labels={labels} title="Sparse checkout settings" onClick={() => sparseDialog(ctx)} />}
+          </div>
+        )}
+
+        <ConflictIndicator ctx={ctx} />
+
+        <SearchBox search={search} />
+
+        <button
+          class="icon-btn"
+          aria-pressed={!detailCollapsed}
+          aria-label={detailCollapsed ? 'Show the Commit Panel' : 'Hide the Commit Panel'}
+          title={`${detailCollapsed ? 'Show' : 'Hide'} Commit Panel (${mod}K)`}
+          onClick={onToggleDetail}
+        >
+          <Icon name="panelRight" size={16} />
+        </button>
       </div>
     </header>
   );
 }
 
-type ToolButtonProps = { icon: IconName; label: string; note?: string; onClick: () => void };
-
-function ToolButton({ icon, label, note, onClick }: ToolButtonProps) {
+function SearchBox({ search }: { search: SearchProps }) {
   return (
-    <button class="tool-btn" title={note ? `${label} (${note})` : label} onClick={onClick}>
-      <Icon name={icon} size={16} />
-      <span>{label}</span>
-      {note && <span class="tool-btn__badge">{note}</span>}
+    <div class="search-box" role="search">
+      <Icon name="search" size={13} />
+      <input
+        ref={search.inputRef}
+        class="search-box__input"
+        type="text"
+        placeholder={`Search commits (${mod}F)`}
+        aria-label="Search commits by message, SHA or author"
+        value={search.query}
+        onInput={event => search.setQuery((event.target as HTMLInputElement).value)}
+        onKeyDown={event => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            search.step(event.shiftKey ? -1 : 1);
+          } else if (event.key === 'Escape' && search.query) {
+            event.stopPropagation();
+            search.setQuery('');
+          }
+        }}
+      />
+      {search.query && (
+        <>
+          <span class="search-box__count">{search.count === 0 ? '0' : `${search.index + 1}/${search.count}`}</span>
+          <button class="icon-btn icon-btn--small" aria-label="Previous result" onClick={() => search.step(-1)}><Icon name="arrowUp" size={12} /></button>
+          <button class="icon-btn icon-btn--small" aria-label="Next result" onClick={() => search.step(1)}><Icon name="arrowDown" size={12} /></button>
+        </>
+      )}
+    </div>
+  );
+}
+
+type ToolButtonProps = {
+  icon: IconName;
+  label: string;
+  labels: boolean;
+  title?: string;
+  badge?: string;
+  disabled?: boolean;
+  onClick: () => void;
+};
+
+function ToolButton({ icon, label, labels, title, badge, disabled, onClick }: ToolButtonProps) {
+  return (
+    <button class="tool-btn" title={title ?? label} aria-label={label} disabled={disabled} onClick={onClick}>
+      <span class="tool-btn__icon">
+        <Icon name={icon} size={16} />
+        {badge && <span class="tool-btn__badge">{badge}</span>}
+      </span>
+      {labels && <span class="tool-btn__label">{label}</span>}
     </button>
   );
+}
+
+export function Popover({ onClose, children }: { onClose: () => void; children: preact.ComponentChildren }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !ref.current?.parentElement?.contains(event.target)) onClose();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [onClose]);
+  return <div class="popover" ref={ref} role="menu">{children}</div>;
 }

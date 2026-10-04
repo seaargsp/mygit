@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { getVsCodeApi } from './vscodeApi';
+import { loadPersisted, savePersisted } from './persist';
 
 type SplitSpec = { axis: 'x' | 'y'; sign: 1 | -1; min: number; max: number };
 
 /** sign 1: dragging towards higher coordinates grows the pane; -1: the reverse. */
 const SPLITS = {
-  sidebar: { axis: 'x', sign: 1, min: 180, max: 460 },
-  detail: { axis: 'x', sign: -1, min: 300, max: 760 },
+  sidebar: { axis: 'x', sign: 1, min: 180, max: 520 },
+  detail: { axis: 'x', sign: -1, min: 300, max: 900 },
   detailTop: { axis: 'y', sign: 1, min: 72, max: 520 },
-  commitBox: { axis: 'y', sign: -1, min: 110, max: 480 },
+  commitBox: { axis: 'y', sign: -1, min: 150, max: 560 },
+  log: { axis: 'y', sign: -1, min: 90, max: 600 },
 } as const satisfies Record<string, SplitSpec>;
 
 export type SplitKey = keyof typeof SPLITS;
 
-const DEFAULTS: Record<SplitKey, number> = { sidebar: 260, detail: 440, detailTop: 150, commitBox: 150 };
+const DEFAULTS: Record<SplitKey, number> = { sidebar: 260, detail: 440, detailTop: 170, commitBox: 230, log: 200 };
 
 export type SplitProps = {
   class: string;
@@ -29,23 +30,21 @@ export type SplitProps = {
 };
 
 const LABELS: Record<SplitKey, string> = {
-  sidebar: 'Resize the branches pane',
-  detail: 'Resize the detail pane',
+  sidebar: 'Resize the Left Panel',
+  detail: 'Resize the Commit Panel',
   detailTop: 'Resize the commit details area',
   commitBox: 'Resize the commit message area',
+  log: 'Resize the Activity Log',
 };
 
 /** Pane sizes live in the webview's own persisted state so they survive a panel reload. */
 export function useSplit() {
-  const [sizes, setSizes] = useState<Record<SplitKey, number>>(() => {
-    const stored = getVsCodeApi().getState() as { sizes?: Partial<Record<SplitKey, number>> } | undefined;
-    return { ...DEFAULTS, ...stored?.sizes };
-  });
+  const [sizes, setSizes] = useState<Record<SplitKey, number>>(() => ({ ...DEFAULTS, ...loadPersisted<Partial<Record<SplitKey, number>>>('sizes', {}) }));
   const drag = useRef<{ key: SplitKey; start: number; startSize: number } | null>(null);
   const [dragging, setDragging] = useState<SplitKey | null>(null);
 
   useEffect(() => {
-    getVsCodeApi().setState({ sizes });
+    savePersisted('sizes', sizes);
   }, [sizes]);
 
   function clamp(key: SplitKey, value: number): number {

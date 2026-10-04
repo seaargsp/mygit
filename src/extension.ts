@@ -1,71 +1,67 @@
 import * as vscode from 'vscode';
-import { createGitClientPanel, restoreGitClientPanel, reloadGitClientPanels, GIT_CLIENT_VIEW_TYPE } from './panel/GitClientPanel';
+import { GIT_CLIENT_VIEW_TYPE } from './panel/GitClientPanel';
+import { LauncherView, LAUNCHER_VIEW_ID } from './panel/launcher';
+import { ActivityLog } from './panel/activityLog';
+import { RevisionContentProvider, REVISION_SCHEME } from './panel/revisionContent';
+import { RepositoryController } from './controller';
+import { registerCommands } from './commands';
 import { isSourceCheckout, watchBuildOutput } from './devReload';
-import { setGitBinaryPath } from './git/gitService';
-import { listBranches, listTags, createTag, deleteTag } from './git/refs';
-import { getCommitLog, assignLanes } from './git/graph';
-import { getCommitDetail, commit } from './git/commit';
-import { getCommitFileDiff, getWorkingFileDiff } from './git/diff';
-import { revertCommit, resetTo, mergeRef } from './git/history';
-import { getWorkingTreeStatus, stageFile, unstageFile, discardFile } from './git/status';
-import { checkoutBranch, createBranch, deleteBranch, fetch, pull, push } from './git/remote';
-import type { GitApi } from './panel/state';
+import { resolveRepoRoot, setGitBinaryPath } from './git/gitService';
+import { getGitDir } from './git/repoState';
 
-const gitApi: GitApi = {
-  listBranches,
-  listTags,
-  getCommitLog: async (repoPath, opts) => assignLanes(await getCommitLog(repoPath, opts)),
-  getCommitDetail,
-  getCommitFileDiff,
-  getWorkingFileDiff,
-  getWorkingTreeStatus,
-  stageFile,
-  unstageFile,
-  discardFile,
-  commit,
-  checkoutBranch,
-  createBranch,
-  deleteBranch,
-  mergeRef,
-  createTag,
-  deleteTag,
-  revertCommit,
-  resetTo,
-  fetch,
-  pull,
-  push,
-};
+let controller: RepositoryController | undefined;
+
+/** First workspace folder that is inside a Git repository: exactly one repository is active. */
+async function findRepository(): Promise<string | undefined> {
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const root = await resolveRepoRoot(folder.uri.fsPath);
+    if (root) return root;
+  }
+  return undefined;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const gitExtension = vscode.extensions.getExtension('vscode.git');
-  if (gitExtension?.exports) {
-    setGitBinaryPath(gitExtension.exports.getAPI(1).git.path);
-  }
+  const gitPath = gitExtension?.exports?.getAPI?.(1)?.git?.path;
+  if (gitPath) setGitBinaryPath(gitPath);
 
-  const disposable = vscode.commands.registerCommand('gitClient.open', () => {
-    const repoPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const log = new ActivityLog();
+  context.subscriptions.push(log);
+
+  const launcher = new LauncherView(() => controller?.openPanel());
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider(LAUNCHER_VIEW_ID, launcher));
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(REVISION_SCHEME, new RevisionContentProvider()));
+
+  registerCommands(context, () => controller);
+
+  // Panels restored before the repository resolves wait for it.
+  const ready = (async () => {
+    const repoPath = await findRepository();
     if (!repoPath) {
-      vscode.window.showInformationMessage('Git Client: open a folder with a Git repository first.');
+      log.application('No Git repository in the workspace');
+      launcher.update({ repoName: null, branch: null, changes: 0 });
       return;
     }
-    createGitClientPanel(context, repoPath, gitApi);
-  });
-  context.subscriptions.push(disposable);
+    controller = new RepositoryController(context, repoPath, await getGitDir(repoPath), log, launcher);
+    context.subscriptions.push(controller);
+  })();
 
   context.subscriptions.push(
     vscode.window.registerWebviewPanelSerializer(GIT_CLIENT_VIEW_TYPE, {
       async deserializeWebviewPanel(panel) {
-        const repoPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!repoPath) {
+        await ready;
+        if (!controller) {
           panel.dispose();
           return;
         }
-        restoreGitClientPanel(context, panel, repoPath, gitApi);
+        controller.restorePanel(panel);
       },
     })
   );
 
-  if (isSourceCheckout(context)) watchBuildOutput(context, reloadGitClientPanels);
+  if (isSourceCheckout(context)) watchBuildOutput(context, () => controller?.reloadPanel());
 }
 
-export function deactivate(): void {}
+export function deactivate(): void {
+  controller = undefined;
+}
