@@ -2,3 +2,4 @@ node_modules/
 dist/
 webview-dist/
 *.log
+*.vsix

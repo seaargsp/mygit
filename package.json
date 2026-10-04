@@ -3,7 +3,9 @@
   "displayName": "mygit",
   "description": "A GitKraken-style Git client for the workspace repository: commit graph, branches, staging, diffs, merge tool and interactive rebase.",
   "version": "0.0.1",
-  "publisher": "local",
+  "publisher": "seaargsp",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/seaargsp/mygit.git" },
   "engines": { "vscode": "^1.85.0" },
   "categories": ["SCM Providers"],
   "extensionKind": ["workspace"],
@@ -110,6 +112,7 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run build",
     "build": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "test": "vitest run"
