@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { createGitClientPanel } from './panel/GitClientPanel';
+import { createGitClientPanel, restoreGitClientPanel, reloadGitClientPanels, GIT_CLIENT_VIEW_TYPE } from './panel/GitClientPanel';
+import { isSourceCheckout, watchBuildOutput } from './devReload';
 import { setGitBinaryPath } from './git/gitService';
 import { listBranches, listTags, createTag, deleteTag } from './git/refs';
 import { getCommitLog, assignLanes } from './git/graph';
@@ -50,6 +51,21 @@ export function activate(context: vscode.ExtensionContext): void {
     createGitClientPanel(context, repoPath, gitApi);
   });
   context.subscriptions.push(disposable);
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer(GIT_CLIENT_VIEW_TYPE, {
+      async deserializeWebviewPanel(panel) {
+        const repoPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!repoPath) {
+          panel.dispose();
+          return;
+        }
+        restoreGitClientPanel(context, panel, repoPath, gitApi);
+      },
+    })
+  );
+
+  if (isSourceCheckout(context)) watchBuildOutput(context, reloadGitClientPanels);
 }
 
 export function deactivate(): void {}

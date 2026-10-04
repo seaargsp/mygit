@@ -3,10 +3,24 @@ import { createStore, type GitApi } from './state';
 import { parseWebviewMessage, type ExtensionToWebviewMessage, type WebviewToExtensionMessage } from './messages';
 
 const DEBOUNCE_MS = 150;
+export const GIT_CLIENT_VIEW_TYPE = 'gitClient';
+
+// Panels attached in this extension host; the dev build watcher reloads their HTML.
+const openPanels = new Set<() => void>();
+
+export function reloadGitClientPanels(): void {
+  for (const reload of openPanels) reload();
+}
+
+function getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
+  return { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'webview-dist')] };
+}
 
 function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  // The version query defeats the webview resource cache after a rebuild.
+  const version = Date.now().toString(36);
   const asset = (file: string) =>
-    webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'webview-dist', file));
+    webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'webview-dist', file)).with({ query: `v=${version}` });
   const nonce = Math.random().toString(36).slice(2);
   return `<!DOCTYPE html>
 <html lang="en">
@@ -26,11 +40,21 @@ function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): stri
 
 export function createGitClientPanel(context: vscode.ExtensionContext, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
   const panel = vscode.window.createWebviewPanel(
-    'gitClient',
+    GIT_CLIENT_VIEW_TYPE,
     'Git Client',
     vscode.ViewColumn.One,
-    { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'webview-dist')] }
+    { ...getWebviewOptions(context.extensionUri), retainContextWhenHidden: true }
   );
+  return attachGitClientPanel(context, panel, repoPath, gitApi);
+}
+
+// Restored panels (window reload, extension host restart) arrive without options or HTML.
+export function restoreGitClientPanel(context: vscode.ExtensionContext, panel: vscode.WebviewPanel, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
+  panel.webview.options = getWebviewOptions(context.extensionUri);
+  return attachGitClientPanel(context, panel, repoPath, gitApi);
+}
+
+function attachGitClientPanel(context: vscode.ExtensionContext, panel: vscode.WebviewPanel, repoPath: string, gitApi: GitApi): vscode.WebviewPanel {
   panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
 
   const store = createStore(repoPath, gitApi);
@@ -135,7 +159,15 @@ export function createGitClientPanel(context: vscode.ExtensionContext, repoPath:
     });
   });
 
+  // A fresh document starts from EMPTY_STATE, so the full state is pushed again.
+  function reload(): void {
+    panel.webview.html = getWebviewHtml(panel.webview, context.extensionUri);
+    void store.refreshAll();
+  }
+  openPanels.add(reload);
+
   panel.onDidDispose(() => {
+    openPanels.delete(reload);
     unsubscribeStore();
     watcher.dispose();
     if (debounceHandle) clearTimeout(debounceHandle);

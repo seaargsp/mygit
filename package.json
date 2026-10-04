@@ -8,7 +8,7 @@
   "categories": ["SCM Providers"],
   "extensionKind": ["workspace"],
   "main": "./dist/extension.js",
-  "activationEvents": ["onCommand:gitClient.open"],
+  "activationEvents": ["onCommand:gitClient.open", "onWebviewPanel:gitClient"],
   "contributes": {
     "commands": [
       { "command": "gitClient.open", "title": "Git Client: Open" }
