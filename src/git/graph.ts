@@ -7,7 +7,10 @@ export type CommitNode = {
   message: string;
   author: string;
   authorEmail: string;
+  /** Author date. */
   date: string;
+  /** Committer date: the graph's sort key. */
+  commitDate: string;
   refs: string[];
   body: string;
   /** Synthetic stash row: drawn on the commit the stash was created from. */
@@ -18,37 +21,43 @@ const FIELD_SEP = '\x1f';
 const RECORD_SEP = '\x1e';
 
 /**
- * Commits reachable from `revs` (passed on stdin, so thousands of refs do not hit the
- * command-line limit). An empty list yields no commits.
+ * Commits reachable from `revs`, newest committer date first with every child above its
+ * parents (`--date-order`). Refnames go on stdin, so thousands of refs do not hit the
+ * command-line limit; pseudo-options (`--branches`, `--remotes`, `--tags`) go on argv. An
+ * empty list yields no commits.
  */
 export async function getCommitLog(
   repoPath: string,
   opts: { revs: string[]; limit: number | null; offset: number }
 ): Promise<CommitNode[]> {
   if (opts.revs.length === 0) return [];
+  const pseudo = opts.revs.filter(rev => rev.startsWith('--'));
+  const refs = opts.revs.filter(rev => !rev.startsWith('--'));
   const args = [
     'log',
     '--stdin',
     `--skip=${opts.offset}`,
-    '--topo-order',
+    '--date-order',
     '--decorate=short',
-    `--pretty=format:%H${FIELD_SEP}%P${FIELD_SEP}%an${FIELD_SEP}%ae${FIELD_SEP}%aI${FIELD_SEP}%s${FIELD_SEP}%D${FIELD_SEP}%b${RECORD_SEP}`,
+    `--pretty=format:%H${FIELD_SEP}%P${FIELD_SEP}%an${FIELD_SEP}%ae${FIELD_SEP}%aI${FIELD_SEP}%cI${FIELD_SEP}%s${FIELD_SEP}%D${FIELD_SEP}%b${RECORD_SEP}`,
+    ...pseudo,
   ];
   if (opts.limit !== null) args.push(`--max-count=${opts.limit}`);
 
-  const output = await runGit(repoPath, args, { input: `${opts.revs.join('\n')}\n` });
+  const output = await runGit(repoPath, args, { input: refs.length > 0 ? `${refs.join('\n')}\n` : '' });
   return output
     .split(RECORD_SEP)
     .map(record => record.replace(/^\n/, ''))
     .filter(Boolean)
     .map(record => {
-      const [sha, parents, author, authorEmail, date, message, refs, body] = record.split(FIELD_SEP);
+      const [sha, parents, author, authorEmail, date, commitDate, message, refs, body] = record.split(FIELD_SEP);
       return {
         sha,
         parents: parents ? parents.split(' ').filter(Boolean) : [],
         author,
         authorEmail,
         date,
+        commitDate,
         message,
         refs: refs ? refs.split(', ').filter(ref => ref && ref !== 'refs/stash') : [],
         body: body?.trim() ?? '',
@@ -75,6 +84,7 @@ export function insertStashes(commits: CommitNode[], stashes: StashRef[]): Commi
         author: '',
         authorEmail: '',
         date: stash.date,
+        commitDate: stash.date,
         refs: [],
         body: '',
         stash: { ref: stash.ref, index: stash.index },
@@ -89,6 +99,8 @@ export type LaneCommit = CommitNode & {
   lane: number;
   /** Lane each parent edge travels down; it bends into the parent's own lane at the parent row. */
   parentLanes: number[];
+  /** Outside the soloed references: drawn dimmed. */
+  muted?: boolean;
 };
 
 /**
@@ -159,4 +171,19 @@ export function firstParentChain(commits: CommitNode[], tip: string): Set<string
     current = current.parents[0] ? bySha.get(current.parents[0]) : undefined;
   }
   return chain;
+}
+
+/** Commits reachable from `tips` within the loaded commits (tips included). */
+export function reachableFrom(commits: CommitNode[], tips: Iterable<string>): Set<string> {
+  const bySha = new Map(commits.map(commit => [commit.sha, commit]));
+  const reached = new Set<string>();
+  const stack = [...tips];
+  while (stack.length > 0) {
+    const sha = stack.pop()!;
+    if (reached.has(sha)) continue;
+    reached.add(sha);
+    const commit = bySha.get(sha);
+    if (commit) stack.push(...commit.parents);
+  }
+  return reached;
 }

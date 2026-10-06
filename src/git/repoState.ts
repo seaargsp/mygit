@@ -162,3 +162,13 @@ export async function setSparseCheckout(repoPath: string, action: 'enable' | 'di
 export async function runLfs(repoPath: string, action: 'pull' | 'fetch' | 'prune'): Promise<void> {
   await runGit(repoPath, ['lfs', action]);
 }
+
+/** Whether the object store carries a commit-graph (single file or split chain). */
+export async function hasCommitGraph(repoPath: string): Promise<boolean> {
+  const resolve = async (file: string) => path.resolve(repoPath, (await runGit(repoPath, ['rev-parse', '--git-path', file])).trim());
+  return (await exists(await resolve('objects/info/commit-graph'))) || exists(await resolve('objects/info/commit-graphs/commit-graph-chain'));
+}
+
+export async function writeCommitGraph(repoPath: string): Promise<void> {
+  await runGit(repoPath, ['commit-graph', 'write', '--reachable', '--split']);
+}

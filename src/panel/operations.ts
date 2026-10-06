@@ -13,7 +13,7 @@ import { buildPartialPatch, createPatch, getCommitFileDiff, getRangeFileDiff, ge
 import { commit, editHeadMessage, saveCommitTemplate } from '../git/commit';
 import {
   addRemote, checkoutBranch, checkoutDetached, checkoutRemoteBranch, createBranch, deleteLocalBranch, deleteRemoteBranch,
-  editRemote, fastForwardBranch, fetch, moveBranch, pull, push, PushRejectedError, removeRemote, renameBranch,
+  editRemote, fastForwardBranch, fetch, moveBranch, pull, pullBranch, push, PushRejectedError, removeRemote, renameBranch,
   restoreRemote, setUpstream, snapshotRemote, UnmergedBranchError, isValidBranchName,
 } from '../git/remote';
 import {
@@ -707,6 +707,12 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       await store.run(`Fast-forward ${branch} to ${target}`, () => fastForwardBranch(repoPath, branch, target, branch === state().head.branch));
       return;
     }
+    case 'branch:pull': {
+      const { branch } = message.payload;
+      await store.run(`Pull ${branch} (fast-forward)`, () => pullBranch(repoPath, branch));
+      void host.checkConflicts(false);
+      return;
+    }
     case 'branch:merge': {
       const { ref, into } = message.payload;
       const squash = config().get('squashMerge', false);
@@ -777,7 +783,7 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
         else set.delete(id);
       }
       store.setRepoPrefs({ solo: [...set] });
-      await store.refreshGraph();
+      store.publishLog();
       return;
     }
     case 'graph:smartVisibility':
@@ -819,7 +825,7 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
     // ------------------------------------------------------------ remotes
     case 'remote:fetch': {
       const { remote } = message.payload;
-      await store.run(remote ? `Fetch ${remote}` : 'Fetch all', () => fetch(repoPath, { remote, prune: prune() }));
+      await store.run(remote ? `Fetch ${remote}` : 'Fetch all', () => fetch(repoPath, { remote, prune: prune(), writeCommitGraph: config().get('writeCommitGraph', true) }));
       void host.checkConflicts(false);
       return;
     }

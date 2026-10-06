@@ -3,6 +3,13 @@ import { Icon } from '../lib/icons';
 import { NONE, createBranchAt, forcePushDialog, send } from '../lib/actions';
 import { plural } from '../lib/format';
 
+/** Display name of a visibility id: `refs/heads/x`, `refs/remotes/o/x`, `refs/tags/x`, `remote:o`, `stash:<sha>`. */
+function soloLabel(id: string): string {
+  if (id.startsWith('remote:')) return `${id.slice('remote:'.length)} (all branches)`;
+  if (id.startsWith('stash:')) return `stash ${id.slice('stash:'.length, 'stash:'.length + 7)}`;
+  return id.replace(/^refs\/(heads|remotes|tags)\//, '');
+}
+
 const OPERATION_LABEL = { merge: 'Merge', rebase: 'Rebase', 'cherry-pick': 'Cherry-pick', revert: 'Revert' } as const;
 
 /** Detached HEAD, in-progress operations and a branch that diverged from its upstream. */
@@ -35,6 +42,18 @@ export function Banners({ ctx }: { ctx: Ctx }) {
                 Continue {OPERATION_LABEL[operation.kind]}
               </button>
             )}
+          </span>
+        </div>
+      )}
+
+      {state.repoPrefs.solo.length > 0 && (
+        <div class="banner banner--solo" role="status" data-testid="solo-banner">
+          <Icon name="solo" />
+          <span class="banner__text">
+            <strong>Solo</strong> · {state.repoPrefs.solo.map(soloLabel).join(', ')} · commits of other references are dimmed
+          </span>
+          <span class="banner__actions">
+            <button class="btn btn--small" onClick={() => send(ctx, 'refs:solo', { ids: state.repoPrefs.solo, solo: false })}>Exit solo</button>
           </span>
         </div>
       )}

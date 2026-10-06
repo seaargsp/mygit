@@ -21,7 +21,7 @@ import { Icon } from './lib/icons';
 import { setDatePrefs, plural } from './lib/format';
 import { emit, isTyping, primary } from './lib/events';
 import { usePersisted } from './lib/persist';
-import { NONE, createFileDialog, renameDialog, send, sparseDialog, templateDialog } from './lib/actions';
+import { NONE, createFileDialog, createRefDialog, renameDialog, send, sparseDialog, templateDialog } from './lib/actions';
 
 const EMPTY_STATE: ClientState = {
   noRepo: false,
@@ -40,7 +40,7 @@ const EMPTY_STATE: ClientState = {
   repo: null,
   template: null,
   prefs: {
-    dateFormat: 'relative', dateLocale: '', authorDisplay: 'initials', graphMetadata: ['branches', 'tags'], highlightOnBranchHover: true,
+    dateFormat: 'Y-m-d H:i', relativeDateDays: 3, dateLocale: '', authorDisplay: 'initials', graphMetadata: ['branches', 'tags'], highlightOnBranchHover: true,
     showToolbarLabels: true, squashMerge: false, gpgSign: false, lazyLoad: true, showAllCommits: false, applyCommitTemplate: true,
     removeTemplateComments: true, conflictDetection: true,
   },
@@ -140,7 +140,15 @@ export function App() {
     },
     openDialog: setDialog,
     startInline(request: InlineRequest) {
-      if (stateRef.current.view.kind !== 'graph') dispatch({ type: 'view:close', payload: NONE });
+      const current = stateRef.current;
+      // The inline field lives in the row's Branch / Tag cell: without that cell or row
+      // (column hidden, reference hidden, commit beyond the loaded page) a dialog asks instead.
+      const shown = !current.repoPrefs.columns.hidden.includes('refs') && current.commitLog.some(commit => commit.sha === request.sha);
+      if (!shown) {
+        createRefDialog({ state: current, dispatch, ui }, request);
+        return;
+      }
+      if (current.view.kind !== 'graph') dispatch({ type: 'view:close', payload: NONE });
       setInline(request);
     },
     revealCommit(sha: string) {

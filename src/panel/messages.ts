@@ -100,7 +100,10 @@ export const DEFAULT_REPO_PREFS: RepoPrefs = {
 
 /** Settings the webview renders with (`mygit.*`). */
 export type Prefs = {
-  dateFormat: 'relative' | 'locale' | 'iso';
+  /** Absolute date pattern, PHP `date()` tokens (`Y-m-d H:i`). */
+  dateFormat: string;
+  /** Dates younger than this many days render relative ("2 days ago"); 0 always renders absolute. */
+  relativeDateDays: number;
   dateLocale: string;
   authorDisplay: 'initials' | 'avatars';
   graphMetadata: string[];
@@ -235,6 +238,7 @@ export type Ops = {
   'branch:deleteRemote': { remote: string; branch: string };
   'branch:setUpstream': { branch: string; remote: string; remoteBranch: string };
   'branch:fastForward': { branch: string; target: string };
+  'branch:pull': { branch: string };
   'branch:merge': { ref: string; into?: string };
   'branch:rebase': { onto: string; branch?: string };
   'branch:rebaseRange': { onto: string; from: string };
@@ -298,7 +302,7 @@ const OP_NAMES: Record<OpName, true> = {
   'commit:create': true, 'commit:editMessage': true, 'commit:revert': true, 'commit:reset': true,
   'commit:cherryPick': true, 'commit:squash': true, 'commit:drop': true, 'commit:checkout': true,
   'branch:checkout': true, 'branch:checkoutRemote': true, 'branch:create': true, 'branch:rename': true,
-  'branch:delete': true, 'branch:deleteRemote': true, 'branch:setUpstream': true, 'branch:fastForward': true,
+  'branch:delete': true, 'branch:deleteRemote': true, 'branch:setUpstream': true, 'branch:fastForward': true, 'branch:pull': true,
   'branch:merge': true, 'branch:rebase': true, 'branch:rebaseRange': true, 'branch:pushTo': true,
   'branch:pin': true, 'refs:hide': true, 'refs:solo': true, 'graph:smartVisibility': true,
   'prefs:columns': true, 'prefs:sections': true, 'tag:create': true, 'tag:delete': true,

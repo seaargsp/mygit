@@ -5,8 +5,9 @@ export const LAUNCHER_VIEW_ID = 'mygit.launcher';
 export type LauncherInfo = { repoName: string | null; branch: string | null; changes: number };
 
 /**
- * Activity Bar view. Making it visible opens the client panel in the editor area; the view
- * itself shows the repository summary, the empty state, and carries the change-count badge.
+ * Activity Bar view. Making it visible opens the client panel in the editor area and closes
+ * the side bar again, so the Activity Bar icon acts as a launcher. The view itself shows the
+ * empty state (no repository, side bar kept open) and carries the change-count badge.
  */
 export class LauncherView implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
@@ -21,18 +22,26 @@ export class LauncherView implements vscode.WebviewViewProvider {
       if (message?.type === 'open') this.onOpen();
     });
     view.onDidChangeVisibility(() => {
-      if (view.visible && this.info.repoName) this.onOpen();
+      if (view.visible && this.info.repoName) this.launch();
     });
     view.onDidDispose(() => {
       this.view = undefined;
     });
     this.render();
-    if (this.info.repoName) this.onOpen();
+    if (this.info.repoName) this.launch();
+  }
+
+  private launch(): void {
+    this.onOpen();
+    void vscode.commands.executeCommand('workbench.action.closeSidebar');
   }
 
   update(info: Partial<LauncherInfo>): void {
+    const resolved = !this.info.repoName && Boolean(info.repoName);
     this.info = { ...this.info, ...info };
     this.render();
+    // The view became visible before the repository resolved.
+    if (resolved && this.view?.visible) this.launch();
   }
 
   private render(): void {

@@ -7,12 +7,14 @@ import type { ActivityLog } from './panel/activityLog';
 import type { LauncherView } from './panel/launcher';
 import type { WebviewAction, WebviewToExtensionMessage } from './panel/messages';
 import { fetch } from './git/remote';
+import { hasCommitGraph, writeCommitGraph } from './git/repoState';
 import { matchTargets, predictConflicts, type TargetConflicts } from './git/conflicts';
 import { isAncestor } from './git/history';
 
 const WORKING_DEBOUNCE_MS = 300;
 const GIT_DEBOUNCE_MS = 150;
 const CONFLICT_DEBOUNCE_MS = 2000;
+const MIN_FETCH_SECONDS = 10;
 
 /** Paths under .git whose change means refs, HEAD or an in-progress operation moved. */
 const GIT_STATE = /^(HEAD|ORIG_HEAD|packed-refs|FETCH_HEAD|MERGE_HEAD|MERGE_MSG|REBASE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|config|refs\/.*|logs\/refs\/stash|rebase-merge(\/.*)?|rebase-apply(\/.*)?|info\/sparse-checkout)$/;
@@ -29,6 +31,7 @@ export class RepositoryController implements vscode.Disposable, Host {
   private gitTimer: ReturnType<typeof setTimeout> | undefined;
   private conflictTimer: ReturnType<typeof setTimeout> | undefined;
   private fetchTimer: ReturnType<typeof setInterval> | undefined;
+  private fetching = false;
   private lastConflictKey = '';
 
   constructor(
@@ -72,7 +75,10 @@ export class RepositoryController implements vscode.Disposable, Host {
     }));
 
     this.log.application(`Repository opened: ${repoPath}`);
-    void this.store.refreshAll();
+    void this.store.refreshAll().then(async () => {
+      await this.ensureCommitGraph();
+      await this.autoFetch();
+    });
   }
 
   // ---------------------------------------------------------------- panel
@@ -93,7 +99,7 @@ export class RepositoryController implements vscode.Disposable, Host {
       return this.panel;
     }
     this.panel = ClientPanel.create(this.context.extensionUri, `mygit: ${this.store.getState().repoName}`, this.panelHandlers());
-    void this.store.refreshAll();
+    void this.store.refreshIfIdle();
     void this.checkConflicts(false);
     return this.panel;
   }
@@ -170,23 +176,47 @@ export class RepositoryController implements vscode.Disposable, Host {
   private startAutoFetch(): void {
     if (this.fetchTimer) clearInterval(this.fetchTimer);
     this.fetchTimer = undefined;
-    const minutes = Math.min(60, Math.max(0, vscode.workspace.getConfiguration('mygit').get('autoFetchInterval', 1)));
-    if (minutes === 0) return;
-    this.fetchTimer = setInterval(() => void this.autoFetch(), minutes * 60_000);
+    const seconds = Math.max(0, vscode.workspace.getConfiguration('mygit').get<number>('autoFetchInterval', 120));
+    if (seconds === 0) return;
+    this.fetchTimer = setInterval(() => void this.autoFetch(), Math.max(MIN_FETCH_SECONDS, seconds) * 1000);
   }
 
   private async autoFetch(): Promise<void> {
-    if (this.store.getState().remotes.length === 0 || this.store.getState().busy) return;
     const config = vscode.workspace.getConfiguration('mygit');
+    if (config.get<number>('autoFetchInterval', 120) === 0) return;
+    if (this.fetching || this.store.getState().remotes.length === 0 || this.store.getState().busy) return;
+    this.fetching = true;
     const started = Date.now();
     try {
-      await fetch(this.repoPath, { prune: config.get('autoPrune', true) });
+      await fetch(this.repoPath, { prune: config.get('autoPrune', true), writeCommitGraph: config.get('writeCommitGraph', true) });
       if (config.get('extendedLogging', false)) this.log.repository('Auto-fetch', { durationMs: Date.now() - started });
       await this.store.refreshAll();
       await this.checkConflicts(false);
     } catch (error) {
       if (config.get('extendedLogging', false)) {
         this.log.repository(`Auto-fetch failed: ${error instanceof Error ? error.message : String(error)}`, { level: 'error' });
+      }
+    } finally {
+      this.fetching = false;
+    }
+  }
+
+  /**
+   * Writes a commit-graph file when the repository has none. Its generation numbers let
+   * `git log --date-order` stream the newest commits instead of walking the whole history
+   * first, which dominates graph load time on large repositories. `git gc` writes the same
+   * file by default (gc.writeCommitGraph).
+   */
+  private async ensureCommitGraph(): Promise<void> {
+    if (!vscode.workspace.getConfiguration('mygit').get('writeCommitGraph', true)) return;
+    if (!(await hasCommitGraph(this.repoPath))) {
+      const started = Date.now();
+      try {
+        await writeCommitGraph(this.repoPath);
+        this.log.repository('Commit-graph written', { durationMs: Date.now() - started });
+        await this.store.refreshGraph();
+      } catch (error) {
+        this.log.repository(`Commit-graph write failed: ${error instanceof Error ? error.message : String(error)}`, { level: 'error' });
       }
     }
   }

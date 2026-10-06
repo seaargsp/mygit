@@ -14,8 +14,8 @@ import {
 import { UndoJournal } from './undo';
 import type { ActivityLog } from './activityLog';
 import { runGit, setGitLogger, GitError, type GitLogEntry } from '../git/gitService';
-import { listBranches, listRemotes, listStashes, listTags, defaultBranch } from '../git/refs';
-import { assignLanes, firstParentChain, getCommitLog, insertStashes, type CommitNode } from '../git/graph';
+import { listBranches, listRemotes, listStashes, listTags, defaultBranch, revParse } from '../git/refs';
+import { assignLanes, firstParentChain, getCommitLog, insertStashes, reachableFrom, type CommitNode } from '../git/graph';
 import { EMPTY_STATUS, getWorkingTreeStatus, listAllFiles } from '../git/status';
 import { getCommitDetail, getCommitTemplate, getHeadMessage, applyTemplate } from '../git/commit';
 import {
@@ -33,7 +33,8 @@ const PREFS_KEY = 'mygit.repoPrefs';
 export function readPrefs(): Prefs {
   const config = vscode.workspace.getConfiguration('mygit');
   return {
-    dateFormat: config.get('dateFormat', 'relative'),
+    dateFormat: config.get('dateFormat', 'Y-m-d H:i') || 'Y-m-d H:i',
+    relativeDateDays: Math.max(0, config.get('relativeDateDays', 3)),
     dateLocale: config.get('dateLocale', ''),
     authorDisplay: config.get('authorDisplay', 'initials'),
     graphMetadata: config.get('graphMetadata', ['branches', 'tags']),
@@ -161,6 +162,11 @@ export class Store {
 
   // ---------------------------------------------------------------- refresh
 
+  /** Refreshes unless a refresh is already running (which reflects the current state). */
+  refreshIfIdle(): Promise<void> {
+    return this.refreshing ?? this.refreshAll();
+  }
+
   /** Coalesces concurrent refresh requests into one running refresh and at most one queued. */
   refreshAll(): Promise<void> {
     if (this.refreshing) {
@@ -180,6 +186,15 @@ export class Store {
   }
 
   private async doRefreshAll(): Promise<void> {
+    // With nothing hidden the graph's revisions are known up front, so the log (the slowest
+    // query on large repositories) runs alongside the reference and status queries.
+    const graphLog = this.unfilteredGraph()
+      ? revParse(this.repoPath, 'HEAD').then(head => getCommitLog(this.repoPath, {
+        revs: ['--branches', '--remotes', '--tags', ...(head ? ['HEAD'] : [])],
+        limit: this.limit,
+        offset: 0,
+      }))
+      : null;
     const [branches, tags, remotes, stashes, status, repoState, headMessage, pushed, template] = await Promise.all([
       listBranches(this.repoPath),
       listTags(this.repoPath),
@@ -208,9 +223,19 @@ export class Store {
       targetBranch,
       undo: this.journal.labels(),
     });
-    await this.refreshGraph();
+    if (graphLog) {
+      this.rawLog = await graphLog;
+      this.publishLog();
+    } else {
+      await this.refreshGraph();
+    }
     await this.refreshSelection();
     await this.refreshView();
+  }
+
+  private unfilteredGraph(): boolean {
+    const { hidden, smartVisibility } = this.state.repoPrefs;
+    return hidden.length === 0 && !smartVisibility;
   }
 
   private headInfo(branch: ClientState['workingTreeStatus']['branch'], message: string | null, pushed: boolean): HeadInfo {
@@ -241,8 +266,9 @@ export class Store {
     await this.refreshView();
   }
 
+  /** Revisions the graph walks. Solo does not narrow them: the other references are dimmed. */
   private visibleRevs(): string[] {
-    const { hidden, solo, smartVisibility } = this.state.repoPrefs;
+    const { hidden, smartVisibility } = this.state.repoPrefs;
     const { branches, tags, head, targetBranch } = this.state;
     type RefId = { id: string; group: string | null };
     const local: RefId[] = branches.local.map(branch => ({ id: `refs/heads/${branch.name}`, group: null }));
@@ -270,9 +296,6 @@ export class Store {
       return withHead([...ids]);
     }
 
-    if (solo.length > 0) {
-      return all.filter(ref => solo.includes(ref.id) || (ref.group !== null && solo.includes(ref.group))).map(ref => ref.id);
-    }
     return withHead(all.filter(ref => !hidden.includes(ref.id) && !(ref.group !== null && hidden.includes(ref.group))).map(ref => ref.id));
   }
 
@@ -282,22 +305,38 @@ export class Store {
     this.publishLog();
   }
 
-  private publishLog(): void {
+  /** Re-derives the graph rows (lanes, stashes, solo dimming) from the loaded log. */
+  publishLog(): void {
     const { hidden, solo, pinned } = this.state.repoPrefs;
-    const stashes = this.state.stashes.filter(stash => {
-      const id = `stash:${stash.sha}`;
-      return solo.length > 0 ? solo.includes(id) : !hidden.includes(id);
-    });
+    const stashes = this.state.stashes.filter(stash => !hidden.includes(`stash:${stash.sha}`));
     const rows = insertStashes(this.rawLog, stashes);
     const pinnedBranch = pinned
       .map(name => this.state.branches.local.find(branch => branch.name === name))
       .find(branch => branch !== undefined);
     const chain = pinnedBranch ? firstParentChain(this.rawLog, pinnedBranch.sha) : new Set<string>();
+    const lanes = assignLanes(rows, chain);
+    const soloed = solo.length > 0 ? reachableFrom(rows, this.soloTips(solo)) : null;
     this.setState({
-      commitLog: assignLanes(rows, chain),
+      commitLog: soloed ? lanes.map(commit => (soloed.has(commit.sha) ? commit : { ...commit, muted: true })) : lanes,
       hasMore: this.limit !== null && this.rawLog.length >= this.limit,
     });
     if (this.state.prefs.authorDisplay === 'avatars') this.computeAvatars();
+  }
+
+  /** Tip commits of the soloed reference ids (`refs/...`, `remote:<name>`, `stash:<sha>`). */
+  private soloTips(solo: string[]): string[] {
+    const { branches, tags } = this.state;
+    const tips: string[] = [];
+    for (const branch of branches.local) if (solo.includes(`refs/heads/${branch.name}`)) tips.push(branch.sha);
+    for (const group of branches.remote) {
+      const whole = solo.includes(`remote:${group.remoteName}`);
+      for (const branch of group.branches) {
+        if (whole || solo.includes(`refs/remotes/${group.remoteName}/${branch.name}`)) tips.push(branch.sha);
+      }
+    }
+    for (const tag of tags) if (solo.includes(`refs/tags/${tag.name}`)) tips.push(tag.sha);
+    for (const id of solo) if (id.startsWith('stash:')) tips.push(id.slice('stash:'.length));
+    return tips;
   }
 
   private computeAvatars(): void {

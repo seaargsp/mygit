@@ -4,7 +4,7 @@ import type { StashRef, TagRef } from '../../git/refs';
 import type { ClientState, DiffSource, OpName, Ops, ResetMode, WebviewToExtensionMessage } from '../../panel/messages';
 import type { MenuItem } from '../components/ContextMenu';
 import { confirmDialog, promptDialog, type DialogRequest } from '../components/Dialog';
-import { branchNameError, dragRefLabel, type Ctx, type DragRef } from './ui';
+import { branchNameError, dragRefLabel, type Ctx, type DragRef, type InlineRequest } from './ui';
 import { emit } from './events';
 import { plural, shortSha } from './format';
 
@@ -68,6 +68,21 @@ export function isSquashable(commits: LaneCommit[]): boolean {
 }
 
 // ------------------------------------------------------------------ flows
+
+/** Dialog form of the inline name field, for a commit the graph does not show as a row. */
+export function createRefDialog(ctx: Ctx, request: InlineRequest): void {
+  const branch = request.kind === 'branch';
+  const existing = branch ? ctx.state.branches.local.map(entry => entry.name) : ctx.state.tags.map(tag => tag.name);
+  ctx.ui.openDialog(promptDialog(
+    branch ? 'Create branch' : 'Create tag',
+    branch ? 'Branch name' : 'Tag name',
+    branch ? 'Create and check out' : 'Create tag',
+    name => (branch
+      ? send(ctx, 'branch:create', { name, from: request.sha, checkout: true })
+      : send(ctx, 'tag:create', { name, ref: request.sha })),
+    { body: `At ${shortSha(request.sha)}.`, validate: value => branchNameError(value, existing) }
+  ));
+}
 
 export function createBranchAt(ctx: Ctx, sha: string): void {
   ctx.ui.startInline({ kind: 'branch', sha });
@@ -392,8 +407,8 @@ export function localBranchMenu(ctx: Ctx, name: string, multi: string[] = []): M
     ...(isHead ? [item('Push', () => pushFlow(ctx))] : branch.upstream && !branch.upstreamGone
       ? [item('Push', () => send(ctx, 'branch:pushTo', { branch: name, remote: upstreamParts[0], remoteBranch: upstreamParts.slice(1).join('/'), setUpstream: false }))]
       : []),
-    ...(branch.upstream && branch.behind > 0 && branch.ahead === 0
-      ? [item(`Fast-forward ${name} to ${branch.upstream}`, () => send(ctx, 'branch:fastForward', { branch: name, target: branch.upstream! }))]
+    ...(!isHead && branch.upstream && !branch.upstreamGone
+      ? [item(`Pull ${name} (fast-forward)`, () => send(ctx, 'branch:pull', { branch: name }), { hint: `from ${branch.upstream}` })]
       : []),
     item('Set Upstream', () => setUpstreamDialog(ctx, name)),
     sep,

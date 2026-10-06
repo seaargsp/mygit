@@ -70,13 +70,33 @@ export async function fastForwardBranch(repoPath: string, branch: string, target
   else await runGit(repoPath, ['fetch', '.', `${target}:refs/heads/${branch}`]);
 }
 
+/**
+ * Pulls a branch that is not checked out: fetches its upstream straight into the local ref,
+ * which git applies only as a fast-forward. The remote-tracking ref is updated as well.
+ */
+export async function pullBranch(repoPath: string, branch: string): Promise<void> {
+  const config = async (key: string) => (await runGit(repoPath, ['config', '--get', key]).catch(() => '')).trim();
+  const remote = await config(`branch.${branch}.remote`);
+  const merge = await config(`branch.${branch}.merge`);
+  if (!remote || !merge) throw new Error(`${branch} has no upstream to pull from. Set one with "Set Upstream".`);
+  try {
+    await runGit(repoPath, ['fetch', remote, `${merge}:refs/heads/${branch}`]);
+  } catch (error) {
+    if (error instanceof GitError && /non-fast-forward|rejected/.test(error.stderr)) {
+      throw new Error(`${branch} has diverged from its upstream, so it cannot be fast-forwarded. Check it out and pull to merge or rebase.`);
+    }
+    throw error;
+  }
+}
+
 /** Points a branch that is not checked out at another commit. */
 export async function moveBranch(repoPath: string, branch: string, sha: string): Promise<void> {
   await runGit(repoPath, ['branch', '-f', branch, sha]);
 }
 
-export async function fetch(repoPath: string, opts: { remote?: string; prune: boolean }): Promise<void> {
-  const args = ['fetch'];
+export async function fetch(repoPath: string, opts: { remote?: string; prune: boolean; writeCommitGraph?: boolean }): Promise<void> {
+  // fetch.writeCommitGraph extends the commit-graph with the fetched commits.
+  const args = opts.writeCommitGraph ? ['-c', 'fetch.writeCommitGraph=true', 'fetch'] : ['fetch'];
   args.push(opts.remote ?? '--all');
   if (opts.prune) args.push('--prune');
   await runGit(repoPath, args);

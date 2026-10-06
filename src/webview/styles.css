@@ -394,6 +394,8 @@ select.field { padding: 0 4px; }
 .banner--info { background: color-mix(in srgb, var(--accent) 14%, var(--surface-1)); }
 .banner--warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface-1)); }
 .banner--danger { background: color-mix(in srgb, var(--danger) 18%, var(--surface-1)); }
+.banner--solo { background: color-mix(in srgb, var(--solo) 18%, var(--surface-1)); }
+.banner--solo > svg { color: var(--solo); }
 .banner__text { flex: 1; min-width: 0; }
 .banner__actions { display: flex; gap: 6px; flex: none; }
 
@@ -486,6 +488,9 @@ select.field { padding: 0 4px; }
 .ref-row[data-active="true"] { background: var(--surface-active); }
 .ref-row--head .ref-row__name { font-weight: 600; }
 .ref-row--hidden .ref-row__name, .ref-row--hidden .ref-row__icon { opacity: 0.45; }
+.ref-row--muted .ref-row__name, .ref-row--muted .ref-row__icon, .ref-row--muted .ref-row__track { opacity: 0.35; }
+.ref-row--solo { box-shadow: inset 2px 0 0 var(--solo); }
+.ref-row--solo .ref-row__name { color: var(--solo); font-weight: 600; }
 .ref-row--drop { outline: 1px dashed var(--accent); outline-offset: -2px; background: var(--surface-active); }
 .ref-row--folder { color: var(--text-dim); cursor: pointer; }
 .ref-row--remote { cursor: pointer; }
@@ -574,6 +579,7 @@ select.field { padding: 0 4px; }
   border-left-color: var(--accent);
 }
 .commit-row--dim .commit-row__message, .commit-row--dim .commit-row__author, .commit-row--dim .commit-row__date, .commit-row--dim .commit-row__sha { opacity: 0.35; }
+.commit-row--muted .commit-row__refs { opacity: 0.35; }
 .commit-row--match { box-shadow: inset 0 0 0 1px var(--warn); }
 .commit-row--drop { box-shadow: inset 0 0 0 1px var(--accent); background: var(--surface-active); }
 .commit-row--stash .commit-row__subject { font-style: italic; color: var(--text-dim); }

@@ -132,12 +132,12 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
   }, [hoverBranch, owners, prefs.highlightOnBranchHover]);
 
   const isDim = (sha: string): boolean => {
+    const row = rowIndex.get(sha);
+    const commit = row === undefined ? undefined : commitLog[row - rowOffset];
+    if (commit?.muted) return true;
     if (search.active && !search.matches.has(sha)) return true;
     if (branchSet && !branchSet.has(sha)) return true;
-    if (authorFilter) {
-      const commit = commitLog[(rowIndex.get(sha) ?? 0) - rowOffset];
-      if (commit && !commit.stash && !authorFilter.includes(commit.author)) return true;
-    }
+    if (authorFilter && commit && !commit.stash && !authorFilter.includes(commit.author)) return true;
     return false;
   };
 
@@ -484,7 +484,12 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
           </div>
         );
       case 'date':
-        return <div class="commit-row__date" key={id} title={fullDate(commit.date)}>{relativeDate(commit.date)}</div>;
+        // Committer date: the graph is sorted by it, so the column reads newest first.
+        return (
+          <div class="commit-row__date" key={id} title={`committed ${fullDate(commit.commitDate)}\nauthored ${fullDate(commit.date)}`}>
+            {relativeDate(commit.commitDate)}
+          </div>
+        );
       case 'sha':
         return <div class="commit-row__sha" key={id}>{commit.stash ? '' : shortSha(commit.sha)}</div>;
     }
@@ -607,6 +612,7 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
               'commit-row',
               commit.stash ? 'commit-row--stash' : '',
               isDim(commit.sha) ? 'commit-row--dim' : '',
+              commit.muted ? 'commit-row--muted' : '',
               search.current === commit.sha ? 'commit-row--match' : '',
               dropRow === commit.sha ? 'commit-row--drop' : '',
               commit.sha === head.sha ? 'commit-row--head' : '',
@@ -643,8 +649,8 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
 
         {commitLog.length === 0 && (
           <p class="graph__empty">
-            {repoPrefs.solo.length > 0 || repoPrefs.hidden.length > 0 || repoPrefs.smartVisibility
-              ? 'No commits on the visible references. Show hidden references or turn off Solo and Smart Branch Visibility.'
+            {repoPrefs.hidden.length > 0 || repoPrefs.smartVisibility
+              ? 'No commits on the visible references. Show hidden references or turn off Smart Branch Visibility.'
               : head.sha ? 'Loading commits…' : 'This repository has no commits yet.'}
           </p>
         )}

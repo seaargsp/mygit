@@ -87,7 +87,8 @@
     "configuration": {
       "title": "mygit",
       "properties": {
-        "mygit.autoFetchInterval": { "type": "number", "default": 1, "minimum": 0, "maximum": 60, "description": "Minutes between automatic fetches of all remotes. 0 disables auto-fetch." },
+        "mygit.autoFetchInterval": { "type": "number", "default": 120, "minimum": 0, "description": "Seconds between automatic fetches of all remotes (minimum 10). The first fetch runs when the repository opens. 0 disables auto-fetch." },
+        "mygit.writeCommitGraph": { "type": "boolean", "default": true, "description": "Write a commit-graph file (git commit-graph write) when the repository has none, and extend it on fetch. Speeds up graph loading on large repositories." },
         "mygit.autoPrune": { "type": "boolean", "default": true, "description": "Prune remote-tracking refs that no longer exist on the remote when fetching." },
         "mygit.conflictDetection": { "type": "boolean", "default": true, "description": "Automatic Conflict Detection: predict conflicts between the checked-out branch and its target branches." },
         "mygit.conflictPrevention.targetBranches": { "type": "array", "items": { "type": "string" }, "default": ["main", "master", "develop", "origin/main", "origin/master", "origin/develop"], "scope": "resource", "description": "Branches monitored for conflicts. `**` matches across `/`, a leading `!` excludes." },
@@ -98,8 +99,9 @@
         "mygit.extendedLogging": { "type": "boolean", "default": false, "description": "Use extended logging in the Activity Log (each git command, auto-fetch, conflict detection)." },
         "mygit.diffTool": { "type": "string", "enum": ["vscode", "gitConfig"], "enumDescriptions": ["VS Code diff editor", "Git Config Default (diff.tool)"], "default": "vscode", "description": "External diff tool opened with Ctrl+D." },
         "mygit.mergeTool": { "type": "string", "enum": ["vscode", "gitConfig"], "enumDescriptions": ["VS Code merge editor", "Git Config Default (merge.tool)"], "default": "vscode", "description": "External merge tool for conflicted files." },
-        "mygit.dateFormat": { "type": "string", "enum": ["relative", "locale", "iso"], "default": "relative", "description": "Date/Time format in the graph and commit details." },
-        "mygit.dateLocale": { "type": "string", "default": "", "description": "Date/Time locale (BCP 47 tag, for example en-GB). Empty uses the system locale." },
+        "mygit.dateFormat": { "type": "string", "default": "Y-m-d H:i", "markdownDescription": "Absolute date format in the graph and commit details, using PHP `date()` tokens: `Y` `y` year, `m` `n` month, `M` `F` month name, `d` `j` day, `D` `l` weekday, `H` `G` `h` `g` hour, `i` minutes, `s` seconds, `A` `a` AM/PM. `\\` escapes the next character." },
+        "mygit.relativeDateDays": { "type": "number", "default": 3, "minimum": 0, "markdownDescription": "Graph dates younger than this many days are shown relative (`5 hours ago`, `2 days ago`); older dates use `#mygit.dateFormat#`. 0 always uses `#mygit.dateFormat#`." },
+        "mygit.dateLocale": { "type": "string", "default": "", "description": "Locale of month and weekday names in dates (BCP 47 tag, for example en-GB). Empty uses the system locale." },
         "mygit.authorDisplay": { "type": "string", "enum": ["initials", "avatars"], "enumDescriptions": ["Coloured initials", "Gravatar images (sends hashed e-mail addresses to gravatar.com)"], "default": "initials", "description": "Author display on graph nodes and commit details." },
         "mygit.graphMetadata": { "type": "array", "items": { "type": "string", "enum": ["branches", "tags"] }, "default": ["branches", "tags"], "description": "Reference labels shown in the Branch / Tag column." },
         "mygit.highlightOnBranchHover": { "type": "boolean", "default": true, "description": "Highlight the commits of a branch when hovering its label." },

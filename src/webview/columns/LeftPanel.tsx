@@ -69,6 +69,12 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
   const query = filter.trim().toLowerCase();
   const matches = (name: string) => !query || name.toLowerCase().includes(query);
   const soloActive = repoPrefs.solo.length > 0;
+  /** Hidden, soloed, or outside an active solo (dimmed like its commits in the graph). */
+  const visibilityClass = (id: string, group?: string): string => {
+    if (repoPrefs.hidden.includes(id)) return ' ref-row--hidden';
+    if (!soloActive) return '';
+    return repoPrefs.solo.includes(id) || (group !== undefined && repoPrefs.solo.includes(group)) ? ' ref-row--solo' : ' ref-row--muted';
+  };
   const visibleSections = SECTIONS.filter(section => !repoPrefs.sectionsHidden.includes(section.id));
 
   const localBranches = branches.local.filter(branch => matches(branch.name));
@@ -194,11 +200,10 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
   function localRow(branch: BranchRef, label: string, depth: number) {
     const id = `refs/heads/${branch.name}`;
     const key = `local:${branch.name}`;
-    const hidden = repoPrefs.hidden.includes(id);
     return (
       <li
         key={key}
-        class={`ref-row${branch.isHead ? ' ref-row--head' : ''}${hidden ? ' ref-row--hidden' : ''}${dropKey === key ? ' ref-row--drop' : ''}`}
+        class={`ref-row${branch.isHead ? ' ref-row--head' : ''}${visibilityClass(id)}${dropKey === key ? ' ref-row--drop' : ''}`}
         data-active={multi.includes(branch.name)}
         data-testid={`local-branch-${branch.name}`}
         style={{ '--depth': depth } as Record<string, number>}
@@ -236,7 +241,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
     return (
       <li
         key={key}
-        class={`ref-row${repoPrefs.hidden.includes(id) ? ' ref-row--hidden' : ''}${dropKey === key ? ' ref-row--drop' : ''}`}
+        class={`ref-row${visibilityClass(id, `remote:${remote}`)}${dropKey === key ? ' ref-row--drop' : ''}`}
         style={{ '--depth': depth } as Record<string, number>}
         title={qualified}
         data-testid={`remote-branch-${remote}-${branch.name}`}
@@ -276,7 +281,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
     return (
       <li
         key={tag.name}
-        class={`ref-row${repoPrefs.hidden.includes(id) ? ' ref-row--hidden' : ''}`}
+        class={`ref-row${visibilityClass(id)}`}
         style={{ '--depth': 1 } as Record<string, number>}
         title={tag.annotated ? `${tag.name}\n\n${tag.message ?? ''}` : tag.name}
         data-testid={`tag-${tag.name}`}
@@ -298,7 +303,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
     return (
       <li
         key={stash.sha}
-        class={`ref-row${repoPrefs.hidden.includes(id) ? ' ref-row--hidden' : ''}`}
+        class={`ref-row${visibilityClass(id)}`}
         style={{ '--depth': 1 } as Record<string, number>}
         title={`${stash.ref}: ${stash.message}`}
         onClick={() => reveal(stash.sha)}
