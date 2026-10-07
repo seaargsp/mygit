@@ -20,10 +20,28 @@ async function findRepository(): Promise<string | undefined> {
   return undefined;
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+/**
+ * Uses the git binary vscode.git resolved (git.path or its own search). Its `exports` getter
+ * throws until vscode.git has activated, and `getAPI` throws when git.enabled is off or no git
+ * was found; git from PATH stays in use until then, or for good.
+ */
+function useBuiltinGitPath(): void {
   const gitExtension = vscode.extensions.getExtension('vscode.git');
-  const gitPath = gitExtension?.exports?.getAPI?.(1)?.git?.path;
-  if (gitPath) setGitBinaryPath(gitPath);
+  if (!gitExtension) return;
+  const apply = () => {
+    try {
+      const gitPath = gitExtension.exports?.getAPI?.(1)?.git?.path;
+      if (gitPath) setGitBinaryPath(gitPath);
+    } catch {
+      // No git model: PATH lookup.
+    }
+  };
+  if (gitExtension.isActive) apply();
+  else void Promise.resolve(gitExtension.activate()).then(apply, () => undefined);
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  useBuiltinGitPath();
   const applyTimeout = () => setGitTimeout(vscode.workspace.getConfiguration('mygit').get<number>('gitTimeout', 300) * 1000);
   applyTimeout();
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
