@@ -4,6 +4,7 @@ import {
   DEFAULT_REPO_PREFS,
   type CentreView,
   type ClientState,
+  type CommitSearchState,
   type DiffContext,
   type HeadInfo,
   type OpenFile,
@@ -16,7 +17,7 @@ import { UndoJournal } from './undo';
 import type { ActivityLog } from './activityLog';
 import { runGit, setGitLogger, GitError, type GitLogEntry } from '../git/gitService';
 import { listBranches, listRemotes, listStashes, listTags, defaultBranch, revParse, type BranchRef } from '../git/refs';
-import { assignLanes, firstParentChain, getCommitLog, insertStashes, reachableFrom, type CommitNode } from '../git/graph';
+import { assignLanes, countNewerCommits, firstParentChain, getCommitLog, insertStashes, reachableFrom, searchCommits, type CommitNode } from '../git/graph';
 import { EMPTY_STATUS, getWorkingTreeStatus, listAllFiles } from '../git/status';
 import { getCommitDetail, getCommitTemplate, getHeadMessage, applyTemplate } from '../git/commit';
 import {
@@ -53,6 +54,11 @@ export function readPrefs(): Prefs {
 
 /** Rows read before the full first page on the initial graph load. */
 const FIRST_PAGE = 200;
+
+/** Upper bound of full-history search matches. */
+const SEARCH_LIMIT = 1000;
+
+const NO_SEARCH: CommitSearchState = { query: '', shas: [], searching: false, truncated: false };
 
 function initialCommitLimit(): number {
   return Math.max(500, vscode.workspace.getConfiguration('mygit').get('initialCommits', 2000));
@@ -96,6 +102,7 @@ export class Store {
   private selectionToken = 0;
   private viewToken = 0;
   private pendingId = 0;
+  private searchAbort: AbortController | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -125,6 +132,7 @@ export class Store {
       undo: { undo: null, redo: null },
       log: { app: deps.log.app, repo: deps.log.repo },
       conflicts: { checking: false, checkedAt: null, results: [] },
+      commitSearch: NO_SEARCH,
       allFiles: null,
       busy: null,
       pending: [],
@@ -446,6 +454,68 @@ export class Store {
   async loadAll(): Promise<void> {
     this.limit = null;
     await this.refreshGraph();
+  }
+
+  /**
+   * Searches the history behind the graph for `query`. A newer query kills the walk still
+   * running for the previous one. With the whole history loaded the webview's filter is
+   * complete and no git process runs.
+   */
+  async search(query: string): Promise<void> {
+    this.searchAbort?.abort();
+    this.searchAbort = null;
+    const complete = this.limit === null || this.rawLog.length < this.limit;
+    if (!query.trim() || complete) {
+      this.setState({ commitSearch: { ...NO_SEARCH, query } });
+      return;
+    }
+    const controller = new AbortController();
+    this.searchAbort = controller;
+    this.setState({ commitSearch: { ...NO_SEARCH, query, searching: true } });
+    try {
+      const result = await searchCommits(this.repoPath, { revs: this.visibleRevs(), query, limit: SEARCH_LIMIT, signal: controller.signal });
+      if (!controller.signal.aborted) this.setState({ commitSearch: { query, ...result, searching: false } });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      this.deps.log.application(`Commit search failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      this.setState({ commitSearch: { ...NO_SEARCH, query } });
+    } finally {
+      if (this.searchAbort === controller) this.searchAbort = null;
+    }
+  }
+
+  /** Selects a commit, first extending the graph down to it when it is older than the loaded rows. */
+  async revealCommit(sha: string): Promise<void> {
+    if (!this.rawLog.some(commit => commit.sha === sha) && !(await this.loadUntil(sha))) {
+      this.deps.reportError('The commit is not on a branch, tag or remote shown in the graph.');
+      return;
+    }
+    await this.select([sha]);
+  }
+
+  /**
+   * One `git log` sized to reach `sha`: the commits dated at or after it plus a page of
+   * margin, doubled when clock skew put it further down. Repeated `--skip` pages would
+   * re-walk the history from the top each time.
+   */
+  private async loadUntil(sha: string): Promise<boolean> {
+    if (this.limit === null) return false;
+    const revs = this.visibleRevs();
+    const newer = await countNewerCommits(this.repoPath, revs, sha);
+    if (newer === null) return false;
+    let limit = Math.max(this.limit, newer + FIRST_PAGE);
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const log = await getCommitLog(this.repoPath, { revs, limit, offset: 0 });
+      if (log.some(commit => commit.sha === sha)) {
+        this.limit = limit;
+        this.rawLog = log;
+        this.publishLog();
+        return true;
+      }
+      if (log.length < limit) return false;
+      limit *= 2;
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- selection

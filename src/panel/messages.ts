@@ -132,6 +132,16 @@ export type HeadInfo = {
   message: string | null;
 };
 
+/** Full-history commit search for the toolbar query; the webview filters the loaded commits itself. */
+export type CommitSearchState = {
+  query: string;
+  /** Matches in graph order, loaded or not. */
+  shas: string[];
+  searching: boolean;
+  /** More matches exist than `shas` holds. */
+  truncated: boolean;
+};
+
 export type ConflictState = {
   checking: boolean;
   checkedAt: number | null;
@@ -161,6 +171,7 @@ export type ClientState = {
   undo: { undo: string | null; redo: string | null };
   log: { app: LogEntry[]; repo: LogEntry[] };
   conflicts: ConflictState;
+  commitSearch: CommitSearchState;
   allFiles: { rev: string; files: string[] } | null;
   busy: string | null;
   /** Parts whose first load is still running; the webview shows a spinner in their place. */
@@ -201,6 +212,8 @@ export type Ops = {
   'graph:select': { shas: string[] };
   'graph:loadMore': Record<string, never>;
   'graph:loadAll': Record<string, never>;
+  'graph:search': { query: string };
+  'graph:reveal': { sha: string };
   'view:openFile': { file: OpenFile };
   'view:close': Record<string, never>;
   'view:diffContext': { context: DiffContext };
@@ -301,6 +314,7 @@ export type WebviewToExtensionMessage = { [K in OpName]: { type: K; payload: Ops
 /** Completeness is checked by the compiler: every op must appear here. */
 const OP_NAMES: Record<OpName, true> = {
   'ready': true, 'graph:select': true, 'graph:loadMore': true, 'graph:loadAll': true,
+  'graph:search': true, 'graph:reveal': true,
   'view:openFile': true, 'view:close': true, 'view:diffContext': true, 'view:fileView': true,
   'view:history': true, 'view:historySelect': true, 'view:blame': true, 'view:merge': true,
   'view:interactiveRebase': true, 'view:cherryPickMany': true, 'files:listAll': true,

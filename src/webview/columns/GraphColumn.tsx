@@ -270,11 +270,19 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
     if (row !== undefined) scrollToRow(row, 'center');
   }, [reveal?.nonce]);
 
+  // A match below the loaded rows scrolls into view once the graph has been extended to it.
+  const pendingScroll = useRef<string | null>(null);
   useEffect(() => {
-    if (!search.current) return;
-    const row = rowIndex.get(search.current);
-    if (row !== undefined) scrollToRow(row, 'center');
+    pendingScroll.current = search.current;
   }, [search.current]);
+  useEffect(() => {
+    const sha = pendingScroll.current;
+    if (!sha) return;
+    const row = rowIndex.get(sha);
+    if (row === undefined) return;
+    scrollToRow(row, 'center');
+    pendingScroll.current = null;
+  }, [search.current, rowIndex]);
 
   useEffect(() => {
     if (!inline) return;

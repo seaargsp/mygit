@@ -260,6 +260,10 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       return store.loadMore();
     case 'graph:loadAll':
       return store.loadAll();
+    case 'graph:search':
+      return store.search(message.payload.query);
+    case 'graph:reveal':
+      return store.revealCommit(message.payload.sha);
     case 'view:openFile':
       return store.openFile(message.payload.file);
     case 'view:close':

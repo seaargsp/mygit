@@ -67,6 +67,74 @@ export async function getCommitLog(
     });
 }
 
+/** Pseudo-options go on argv, refnames on stdin (see getCommitLog). */
+function splitRevs(revs: string[]): { pseudo: string[]; input: string } {
+  const refs = revs.filter(rev => !rev.startsWith('--'));
+  return { pseudo: revs.filter(rev => rev.startsWith('--')), input: refs.length > 0 ? `${refs.join('\n')}\n` : '' };
+}
+
+export type CommitSearch = { shas: string[]; truncated: boolean };
+
+/** Minimum length of a message or author query; shorter ones match too much history to be useful. */
+export const MIN_SEARCH_LENGTH = 3;
+
+/**
+ * Commits reachable from `revs` whose message or author ("Name <email>") contains `query`
+ * (case-insensitive, literal), or whose SHA starts with it, in graph order (`--date-order`).
+ * Only SHAs are read. Message and author run as two walks: git ANDs `--grep` with `--author`.
+ */
+export async function searchCommits(
+  repoPath: string,
+  opts: { revs: string[]; query: string; limit: number; signal?: AbortSignal }
+): Promise<CommitSearch> {
+  const needle = opts.query.trim();
+  if (opts.revs.length === 0 || !needle) return { shas: [], truncated: false };
+  const { pseudo, input } = splitRevs(opts.revs);
+  type Hit = { sha: string; time: number };
+  const walk = (filter: string): Promise<Hit[]> => runGit(repoPath, [
+    'log', '--stdin', '--date-order', '--no-show-signature', '-i', '-F', filter,
+    '--format=%H %ct', `--max-count=${opts.limit + 1}`, ...pseudo,
+  ], { input, signal: opts.signal }).then(output => output.split('\n').filter(Boolean).map(line => {
+    const [sha, time] = line.split(' ');
+    return { sha, time: Number(time) };
+  }));
+
+  const sha = /^[0-9a-f]{4,40}$/i.test(needle)
+    ? runGit(repoPath, ['rev-parse', '--verify', '-q', `${needle}^{commit}`], { signal: opts.signal }).then(output => output.trim(), () => '')
+    : Promise.resolve('');
+  const text = needle.length >= MIN_SEARCH_LENGTH;
+  const [bySha, byMessage, byAuthor] = await Promise.all([
+    sha,
+    text ? walk(`--grep=${needle}`) : Promise.resolve([]),
+    text ? walk(`--author=${needle}`) : Promise.resolve([]),
+  ]);
+
+  // --date-order sorts by committer date (children first on clock skew): merging the two
+  // walks by that date reproduces the graph order.
+  const merged: string[] = bySha ? [bySha] : [];
+  const seen = new Set(merged);
+  let m = 0;
+  let a = 0;
+  while (m < byMessage.length || a < byAuthor.length) {
+    const next = a >= byAuthor.length || (m < byMessage.length && byMessage[m].time >= byAuthor[a].time) ? byMessage[m++] : byAuthor[a++];
+    if (!seen.has(next.sha)) {
+      seen.add(next.sha);
+      merged.push(next.sha);
+    }
+  }
+  const truncated = byMessage.length > opts.limit || byAuthor.length > opts.limit || merged.length > opts.limit;
+  return { shas: merged.slice(0, opts.limit), truncated };
+}
+
+/** Commits reachable from `revs` with a committer date at or after `sha`'s: about its row in the graph. */
+export async function countNewerCommits(repoPath: string, revs: string[], sha: string): Promise<number | null> {
+  const date = (await runGit(repoPath, ['log', '-1', '--no-show-signature', '--format=%cI', sha]).catch(() => '')).trim();
+  if (!date) return null;
+  const { pseudo, input } = splitRevs(revs);
+  const output = await runGit(repoPath, ['rev-list', '--stdin', '--count', `--since=${date}`, ...pseudo], { input });
+  return Number(output.trim()) || 0;
+}
+
 /** Places each stash directly above the commit it was created from; stashes on unloaded commits are left out. */
 export function insertStashes(commits: CommitNode[], stashes: StashRef[]): CommitNode[] {
   if (stashes.length === 0) return commits;

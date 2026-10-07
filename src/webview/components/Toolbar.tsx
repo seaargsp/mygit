@@ -22,9 +22,15 @@ export type SearchProps = {
   query: string;
   setQuery: (query: string) => void;
   count: number;
+  /** Matches below the loaded rows; stepping to one loads the graph down to it. */
+  older: number;
   index: number;
   step: (delta: 1 | -1) => void;
   inputRef: Ref<HTMLInputElement>;
+  /** The full-history search is running. */
+  searching: boolean;
+  /** The full-history search stopped at its match limit. */
+  truncated: boolean;
 };
 
 const PULL_MODES: { mode: PullMode; label: string }[] = [
@@ -203,7 +209,13 @@ function SearchBox({ search }: { search: SearchProps }) {
       />
       {search.query && (
         <>
-          <span class="search-box__count">{search.count === 0 ? '0' : `${search.index + 1}/${search.count}`}</span>
+          {search.searching && <Spinner size={10} label="Searching history" />}
+          <span
+            class="search-box__count"
+            title={search.older > 0 ? `${search.older} in older history, loaded into the graph when reached` : undefined}
+          >
+            {search.count === 0 ? '0' : `${search.index + 1}/${search.count}${search.truncated ? '+' : ''}`}
+          </span>
           <button class="icon-btn icon-btn--small" aria-label="Previous result" onClick={() => search.step(-1)}><Icon name="arrowUp" size={12} /></button>
           <button class="icon-btn icon-btn--small" aria-label="Next result" onClick={() => search.step(1)}><Icon name="arrowDown" size={12} /></button>
         </>

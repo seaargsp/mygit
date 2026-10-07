@@ -20,6 +20,7 @@ import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
 import { setDatePrefs, plural } from './lib/format';
 import { emit, isTyping, primary } from './lib/events';
+import { combineMatches } from './lib/search';
 import { loadPersisted, savePersisted, usePersisted } from './lib/persist';
 import { NONE, createFileDialog, createRefDialog, renameDialog, send, sparseDialog, templateDialog } from './lib/actions';
 
@@ -49,6 +50,7 @@ const EMPTY_STATE: ClientState = {
   undo: { undo: null, redo: null },
   log: { app: [], repo: [] },
   conflicts: { checking: false, checkedAt: null, results: [] },
+  commitSearch: { query: '', shas: [], searching: false, truncated: false },
   allFiles: null,
   busy: null,
   pending: [],
@@ -116,19 +118,8 @@ function useAutoCollapse(viewOpen: boolean, collapsed: boolean, setCollapsed: (v
   };
 }
 
-function searchMatches(state: ClientState, query: string): string[] {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return [];
-  return state.commitLog
-    .filter(commit => !commit.stash && (
-      commit.message.toLowerCase().includes(needle)
-      || commit.body.toLowerCase().includes(needle)
-      || commit.sha.startsWith(needle)
-      || commit.author.toLowerCase().includes(needle)
-      || commit.authorEmail.toLowerCase().includes(needle)
-    ))
-    .map(commit => commit.sha);
-}
+/** Delay before a typed query runs against the full history. */
+const SEARCH_DEBOUNCE_MS = 400;
 
 export function App() {
   const actionHandler = useRef<(action: WebviewAction) => void>(() => undefined);
@@ -196,9 +187,21 @@ export function App() {
 
   // ------------------------------------------------------------ search
 
-  const matches = useMemo(() => searchMatches(state, query), [state.commitLog, query]);
+  const { matches, loaded: loadedShas, older } = useMemo(
+    () => combineMatches(state.commitLog, query, state.commitSearch),
+    [state.commitLog, query, state.commitSearch]
+  );
   const matchSet = useMemo(() => new Set(matches), [matches]);
   useEffect(() => setSearchIndex(0), [query]);
+  useEffect(() => {
+    // An emptied query goes out at once, killing a walk still running.
+    if (!query.trim()) {
+      dispatch({ type: 'graph:search', payload: { query: '' } });
+      return;
+    }
+    const timer = setTimeout(() => dispatch({ type: 'graph:search', payload: { query } }), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
   const search: SearchState = {
     active: query.trim().length > 0,
     matches: matchSet,
@@ -209,7 +212,10 @@ export function App() {
     if (matches.length === 0) return;
     const next = (searchIndex + delta + matches.length) % matches.length;
     setSearchIndex(next);
-    dispatch({ type: 'graph:select', payload: { shas: [matches[next]] } });
+    const sha = matches[next];
+    // A match below the loaded rows extends the graph down to it first.
+    if (loadedShas.has(sha)) dispatch({ type: 'graph:select', payload: { shas: [sha] } });
+    else dispatch({ type: 'graph:reveal', payload: { sha } });
   }
 
   // ------------------------------------------------------------ extension actions and shortcuts
@@ -362,7 +368,10 @@ export function App() {
         detailCollapsed={detailCollapsed}
         onToggleDetail={() => setDetailCollapsed(value => !value)}
         wipLabel={wipLabel}
-        search={{ query, setQuery, count: matches.length, index: Math.min(searchIndex, Math.max(0, matches.length - 1)), step: stepSearch, inputRef: searchRef }}
+        search={{
+          query, setQuery, count: matches.length, older, index: Math.min(searchIndex, Math.max(0, matches.length - 1)), step: stepSearch, inputRef: searchRef,
+          searching: state.commitSearch.searching, truncated: state.commitSearch.truncated && state.commitSearch.query.trim() === query.trim(),
+        }}
       />
 
       <div class="panes" style={{ gridTemplateColumns: columns }}>

@@ -15,6 +15,8 @@ export type GitRunOptions = {
   okCodes?: number[];
   /** Kills the process after this many milliseconds; 0 waits indefinitely. Defaults to the configured git timeout. */
   timeoutMs?: number;
+  /** Kills the process when aborted (a superseded search). */
+  signal?: AbortSignal;
 };
 
 export type GitResult = { stdout: string; stderr: string; code: number };
@@ -62,27 +64,31 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', onAbort);
       logger?.({ args, durationMs: Date.now() - started, ok: false, stderr });
       reject(error);
     };
 
     // A git waiting on a credential helper, ssh or a hook otherwise never settles. The promise
     // settles at once: `close` waits for every holder of the output pipes, children included.
+    const stop = (detail: string) => {
+      try {
+        if (posix && child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
+        else child.kill();
+      } catch {
+        // Already exited.
+      }
+      child.stdout.destroy();
+      child.stderr.destroy();
+      fail(new GitError(`git ${args.join(' ')} failed: ${detail}`, detail, args, null), detail);
+    };
     const timeoutMs = opts.timeoutMs ?? defaultTimeoutMs;
     const timer = timeoutMs > 0
-      ? setTimeout(() => {
-        try {
-          if (posix && child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
-          else child.kill();
-        } catch {
-          // Already exited.
-        }
-        child.stdout.destroy();
-        child.stderr.destroy();
-        const detail = `git ${args[0] ?? ''} timed out after ${Math.round(timeoutMs / 1000)} s (mygit.gitTimeout)`;
-        fail(new GitError(`git ${args.join(' ')} failed: ${detail}`, detail, args, null), detail);
-      }, timeoutMs)
+      ? setTimeout(() => stop(`git ${args[0] ?? ''} timed out after ${Math.round(timeoutMs / 1000)} s (mygit.gitTimeout)`), timeoutMs)
       : undefined;
+    const onAbort = () => stop(`git ${args[0] ?? ''} aborted`);
+    if (opts.signal?.aborted) onAbort();
+    else opts.signal?.addEventListener('abort', onAbort, { once: true });
 
     child.stdout.on('data', chunk => out.push(chunk));
     child.stderr.on('data', chunk => err.push(chunk));
@@ -99,9 +105,13 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
       }
       settled = true;
       clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', onAbort);
       logger?.({ args, durationMs: Date.now() - started, ok, stderr });
       resolve({ stdout, stderr, code: code ?? 0 });
     });
+    // A git killed (timeout, abort) or exiting before reading its input fails the write with
+    // EPIPE; the outcome is reported by `close` or `fail`.
+    child.stdin.on('error', () => undefined);
     if (opts.input !== undefined) child.stdin.end(opts.input);
     else child.stdin.end();
   });
