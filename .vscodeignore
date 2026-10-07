@@ -8,3 +8,4 @@ esbuild.js
 tsconfig.json
 vitest.config.ts
 *.vsix
+bin/**
