@@ -5,7 +5,7 @@ import { Store } from './panel/state';
 import { handleMessage, type Host } from './panel/operations';
 import type { ActivityLog } from './panel/activityLog';
 import type { LauncherView } from './panel/launcher';
-import type { WebviewAction, WebviewToExtensionMessage } from './panel/messages';
+import { pendingOf, type WebviewAction, type WebviewToExtensionMessage } from './panel/messages';
 import { fetch } from './git/remote';
 import { hasCommitGraph, writeCommitGraph } from './git/repoState';
 import { matchTargets, predictConflicts, type TargetConflicts } from './git/conflicts';
@@ -120,10 +120,13 @@ export class RepositoryController implements vscode.Disposable, Host {
   dispatch(message: WebviewToExtensionMessage): void {
     // Git refuses plenty of these operations (conflicts, unmerged paths, protected refs);
     // the reason has to reach the user rather than an unhandled rejection.
-    void handleMessage(this, message).catch(async error => {
+    const handle = () => handleMessage(this, message).catch(async error => {
       this.reportError(error instanceof Error ? error.message : String(error));
       await this.store.refreshAll().catch(() => undefined);
     });
+    const { head, remotes } = this.store.getState();
+    const pending = pendingOf(message, head.branch, remotes.map(remote => remote.name));
+    void (pending ? this.store.track(pending, handle) : handle());
   }
 
   clearLog(): void {
@@ -188,9 +191,12 @@ export class RepositoryController implements vscode.Disposable, Host {
     this.fetching = true;
     const started = Date.now();
     try {
-      await fetch(this.repoPath, { prune: config.get('autoPrune', true), writeCommitGraph: config.get('writeCommitGraph', true) });
-      if (config.get('extendedLogging', false)) this.log.repository('Auto-fetch', { durationMs: Date.now() - started });
-      await this.store.refreshAll();
+      const remotes = this.store.getState().remotes.map(remote => `remote:${remote.name}`);
+      await this.store.track({ op: 'remote:fetch', refs: remotes }, async () => {
+        await fetch(this.repoPath, { prune: config.get('autoPrune', true), writeCommitGraph: config.get('writeCommitGraph', true) });
+        if (config.get('extendedLogging', false)) this.log.repository('Auto-fetch', { durationMs: Date.now() - started });
+        await this.store.refreshAll();
+      });
       await this.checkConflicts(false);
     } catch (error) {
       if (config.get('extendedLogging', false)) {

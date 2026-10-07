@@ -4,7 +4,7 @@ import type { FileChange } from '../../git/status';
 import type { CommitDetail } from '../../git/commit';
 import type { OpenFile, SelectionView } from '../../panel/messages';
 import type { SplitKey, SplitProps } from '../lib/useSplit';
-import type { Ctx } from '../lib/ui';
+import { isPending, type Ctx } from '../lib/ui';
 import { FileList, type FileViewMode } from '../components/FileList';
 import { Icon } from '../lib/icons';
 import { avatarColor, fullDate, initials, plural, shortSha } from '../lib/format';
@@ -14,6 +14,7 @@ import {
 import { listen, primary } from '../lib/events';
 import { usePersisted } from '../lib/persist';
 import { confirmDialog } from '../components/Dialog';
+import { Spinner } from '../components/Spinner';
 
 type Props = {
   ctx: Ctx;
@@ -411,6 +412,7 @@ function CommitBox({ ctx, wipLabel, setWipLabel }: { ctx: Ctx; wipLabel: string;
       {skipHooks && !stashMode && <p class="commit-box__note">Skipping this will bypass all configured Git hooks for the commit action.</p>}
       {amend && head.pushed && <p class="commit-box__note commit-box__note--warn">HEAD is already pushed. Amending rewrites history and requires a force push.</p>}
       <button class="btn btn--primary commit-box__submit" data-testid="commit-button" disabled={!canCommit} onClick={() => submit(false)}>
+        {isPending(ctx.state, stashMode ? 'stash:save' : 'commit:create') && <Spinner />}
         {label}
       </button>
     </div>
@@ -612,8 +614,8 @@ function StashDetails({ ctx, view }: Props & { view: Extract<SelectionView, { ki
           <p class="author__meta">created {fullDate(stash.date)} on <button class="sha sha--link" onClick={() => ctx.ui.revealCommit(stash.base)}>{shortSha(stash.base)}</button></p>
         </div>
         <div class="detail__actions">
-          <button class="btn btn--small btn--primary" onClick={() => send(ctx, 'stash:pop', { ref: stash.ref })}>Pop</button>
-          <button class="btn btn--small" onClick={() => send(ctx, 'stash:apply', { ref: stash.ref })}>Apply</button>
+          <button class="btn btn--small btn--primary" onClick={() => send(ctx, 'stash:pop', { ref: stash.ref })}>{isPending(ctx.state, 'stash:pop', `stash:${stash.ref}`) && <Spinner />}Pop</button>
+          <button class="btn btn--small" onClick={() => send(ctx, 'stash:apply', { ref: stash.ref })}>{isPending(ctx.state, 'stash:apply', `stash:${stash.ref}`) && <Spinner />}Apply</button>
           <button class="btn btn--small btn--danger-quiet" onClick={() => ctx.ui.openDialog(confirmDialog('Delete stash', `"${stash.message}" is deleted. This cannot be undone.`, 'Delete', () => send(ctx, 'stash:drop', { ref: stash.ref }), true))}>Delete</button>
         </div>
         <div class="file-list">

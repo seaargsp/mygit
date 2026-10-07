@@ -3,13 +3,14 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { BranchRef, StashRef, TagRef } from '../../git/refs';
 import type { MenuItem } from '../components/ContextMenu';
 import type { Ctx, DragRef } from '../lib/ui';
-import { branchNameError, getDragRef, isRefDrag, setDragRef } from '../lib/ui';
+import { branchNameError, getDragRef, isRefDrag, isRefPending, setDragRef } from '../lib/ui';
 import { Icon, type IconName } from '../lib/icons';
 import {
   checkoutLocal, checkoutRemote, dropMenu, localBranchMenu, remoteBranchMenu, remoteDialog, remoteMenu, send, stashIds, stashMenu, tagMenu,
   type DropTarget,
 } from '../lib/actions';
 import { usePersisted } from '../lib/persist';
+import { Spinner } from '../components/Spinner';
 import { primary } from '../lib/events';
 
 type Props = {
@@ -222,6 +223,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
         {renaming === branch.name
           ? <RenameField ctx={ctx} name={branch.name} onDone={onRenameDone} />
           : <span class="ref-row__name">{label}</span>}
+        {isRefPending(state, key) && <Spinner />}
         {(branch.ahead > 0 || branch.behind > 0) && (
           <span class="ref-row__track" title={`${branch.ahead} ahead, ${branch.behind} behind ${branch.upstream}`}>
             {branch.ahead > 0 && <span>↑{branch.ahead}</span>}
@@ -253,6 +255,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
       >
         <span class="ref-row__icon"><Icon name="branch" /></span>
         <span class="ref-row__name">{label}</span>
+        {isRefPending(state, key) && <Spinner />}
         {visibility(id, qualified)}
       </li>
     );
@@ -292,6 +295,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
       >
         <span class="ref-row__icon"><Icon name="tag" /></span>
         <span class="ref-row__name">{tag.name}</span>
+        {isRefPending(state, `tag:${tag.name}`) && <Spinner />}
         {tag.annotated && <span class="ref-row__badge" title="Annotated tag">A</span>}
         {visibility(id, tag.name)}
       </li>
@@ -311,6 +315,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
       >
         <span class="ref-row__icon"><Icon name="stash" /></span>
         <span class="ref-row__name">{stash.message}</span>
+        {isRefPending(state, `stash:${stash.ref}`) && <Spinner />}
         {visibility(id, stash.ref)}
       </li>
     );
@@ -343,6 +348,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
                   <span class="chevron" data-open={open}><Icon name="chevron" size={11} /></span>
                   <Icon name="cloud" size={13} />
                   <span class="ref-row__name">{remote.name}</span>
+                  {isRefPending(state, id) && <Spinner />}
                   <span class="ref-row__count">{remoteBranches.length}</span>
                   {visibility(id, remote.name)}
                 </div>

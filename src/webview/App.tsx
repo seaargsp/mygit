@@ -51,6 +51,7 @@ const EMPTY_STATE: ClientState = {
   conflicts: { checking: false, checkedAt: null, results: [] },
   allFiles: null,
   busy: null,
+  pending: [],
   avatars: {},
 };
 

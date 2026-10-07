@@ -369,7 +369,7 @@ select.field { padding: 0 4px; }
   display: inline-block;
   width: 10px;
   height: 10px;
-  margin-right: 6px;
+  flex: none;
   border: 1.5px solid var(--text-faint);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -377,6 +377,12 @@ select.field { padding: 0 4px; }
   vertical-align: -1px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* On coloured surfaces (primary buttons, reference pills) the spinner follows the text colour. */
+.btn .spinner, .ref-pill .spinner {
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+}
+.tool-btn__icon .spinner { margin: 1px; vertical-align: 0; }
 
 /* --------------------------------------------------------------------------
    Banners and status bar
@@ -412,6 +418,7 @@ select.field { padding: 0 4px; }
 }
 .statusbar__busy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .statusbar__busy--on { color: var(--text); }
+.statusbar__busy .spinner { margin-right: 6px; }
 .statusbar__info { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-faint); }
 .statusbar__btn { display: flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 2px; }
 .statusbar__btn:hover, .statusbar__btn--on { background: var(--surface-hover); color: var(--text); }

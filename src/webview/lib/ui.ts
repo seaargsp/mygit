@@ -1,4 +1,4 @@
-import type { ClientState, WebviewToExtensionMessage } from '../../panel/messages';
+import type { ClientState, OpName, WebviewToExtensionMessage } from '../../panel/messages';
 import type { MenuItem } from '../components/ContextMenu';
 import type { DialogRequest } from '../components/Dialog';
 
@@ -21,6 +21,17 @@ export type Dispatch = (message: WebviewToExtensionMessage) => void;
 
 /** Everything menu builders and flows need. */
 export type Ctx = { state: ClientState; dispatch: Dispatch; ui: Ui };
+
+/** True while an op in `ops` is in flight, restricted to ops acting on `ref` when given. */
+export function isPending(state: ClientState, ops: OpName | OpName[], ref?: string): boolean {
+  const names = Array.isArray(ops) ? ops : [ops];
+  return state.pending.some(pending => names.includes(pending.op) && (ref === undefined || pending.refs.includes(ref)));
+}
+
+/** True while any op acting on `ref` (`local:x`, `remote:o/x`, `remote:o`, `tag:x`, `stash:ref`) is in flight. */
+export function isRefPending(state: ClientState, ref: string): boolean {
+  return state.pending.some(pending => pending.refs.includes(ref));
+}
 
 /** A reference being dragged (graph label or Left Panel row). */
 export type DragRef =

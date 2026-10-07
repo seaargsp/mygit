@@ -2,6 +2,7 @@ import type { Ctx } from '../lib/ui';
 import { Icon } from '../lib/icons';
 import { NONE, pushFlow, rebaseConfirm, send } from '../lib/actions';
 import { plural } from '../lib/format';
+import { Spinner } from './Spinner';
 
 /** Key that suppresses a prediction until either side moves. */
 export function conflictKey(target: string, targetSha: string, headSha: string | null): string {
@@ -16,7 +17,7 @@ export function ConflictIndicator({ ctx }: { ctx: Ctx }) {
   const fileCount = active.reduce((sum, result) => sum + result.files.length, 0);
 
   if (conflicts.checking && active.length === 0) {
-    return <span class="conflict-indicator conflict-indicator--checking" title="Checking target branches for conflicts">…</span>;
+    return <span class="conflict-indicator conflict-indicator--checking" title="Checking target branches for conflicts"><Spinner size={12} label="Checking target branches for conflicts" /></span>;
   }
   if (conflicts.checkedAt === null) return null;
   if (active.length === 0) {

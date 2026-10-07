@@ -7,6 +7,7 @@ import {
   type DiffContext,
   type HeadInfo,
   type OpenFile,
+  type PendingOp,
   type Prefs,
   type RepoPrefs,
   type SelectionView,
@@ -91,6 +92,7 @@ export class Store {
   private refreshQueued = false;
   private selectionToken = 0;
   private viewToken = 0;
+  private pendingId = 0;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -122,6 +124,7 @@ export class Store {
       conflicts: { checking: false, checkedAt: null, results: [] },
       allFiles: null,
       busy: null,
+      pending: [],
       avatars: {},
     };
     deps.log.onChange(() => this.setState({ log: { app: [...deps.log.app], repo: [...deps.log.repo] } }));
@@ -139,6 +142,17 @@ export class Store {
   setState(patch: Partial<ClientState>): void {
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener(patch);
+  }
+
+  /** Lists an operation as pending while `fn` runs. */
+  async track<T>(entry: Omit<PendingOp, 'id'>, fn: () => Promise<T>): Promise<T> {
+    const id = ++this.pendingId;
+    this.setState({ pending: [...this.state.pending, { ...entry, id }] });
+    try {
+      return await fn();
+    } finally {
+      this.setState({ pending: this.state.pending.filter(pending => pending.id !== id) });
+    }
   }
 
   // ---------------------------------------------------------------- preferences

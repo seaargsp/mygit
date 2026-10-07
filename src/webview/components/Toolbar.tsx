@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Ref } from 'preact';
 import type { PullMode } from '../../panel/messages';
-import type { Ctx } from '../lib/ui';
+import { isPending, type Ctx } from '../lib/ui';
 import { Icon, type IconName } from '../lib/icons';
 import { NONE, createBranchAt, pushFlow, send, sparseDialog } from '../lib/actions';
 import { ConflictIndicator } from './ConflictIndicator';
+import { Spinner } from './Spinner';
 import { isMac } from '../lib/events';
 
 type Props = {
@@ -43,6 +44,8 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
   const labels = prefs.showToolbarLabels;
   const defaultPull = PULL_MODES.find(entry => entry.mode === state.repoPrefs.defaultPull) ?? PULL_MODES[1];
   const dirty = state.workingTreeStatus.staged.length + state.workingTreeStatus.unstaged.length > 0;
+  const headRef = head.branch ? `local:${head.branch}` : undefined;
+  const pushing = isPending(state, 'remote:push') || (headRef !== undefined && isPending(state, ['branch:pushTo', 'commit:create'], headRef));
 
   return (
     <header class={`toolbar${labels ? '' : ' toolbar--compact'}`}>
@@ -72,8 +75,8 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
 
       <div class="toolbar__actions">
         <div class="toolbar__group">
-          <ToolButton icon="undo" label="Undo" labels={labels} disabled={!undo.undo} title={undo.undo ? `Undo ${undo.undo} (${mod}Z)` : 'Nothing to undo'} onClick={() => send(ctx, 'undo', NONE)} />
-          <ToolButton icon="redo" label="Redo" labels={labels} disabled={!undo.redo} title={undo.redo ? `Redo ${undo.redo} (${mod}Y)` : 'Nothing to redo'} onClick={() => send(ctx, 'redo', NONE)} />
+          <ToolButton icon="undo" label="Undo" labels={labels} busy={isPending(state, 'undo')} disabled={!undo.undo} title={undo.undo ? `Undo ${undo.undo} (${mod}Z)` : 'Nothing to undo'} onClick={() => send(ctx, 'undo', NONE)} />
+          <ToolButton icon="redo" label="Redo" labels={labels} busy={isPending(state, 'redo')} disabled={!undo.redo} title={undo.redo ? `Redo ${undo.redo} (${mod}Y)` : 'Nothing to redo'} onClick={() => send(ctx, 'redo', NONE)} />
         </div>
 
         <div class="toolbar__group">
@@ -82,6 +85,7 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
               icon="down"
               label="Pull"
               labels={labels}
+              busy={isPending(state, ['remote:pull', 'remote:fetch'])}
               badge={head.behind > 0 ? `↓${head.behind}` : undefined}
               title={`${defaultPull.label} (default)`}
               onClick={() => send(ctx, 'remote:pull', { mode: defaultPull.mode })}
@@ -121,6 +125,7 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
             icon="up"
             label="Push"
             labels={labels}
+            busy={pushing}
             badge={head.ahead > 0 ? `↑${head.ahead}` : head.branch && !head.upstream ? 'new' : undefined}
             title={head.upstream ? `Push ${head.branch} to ${head.upstream}` : 'Push (creates the upstream)'}
             onClick={() => pushFlow(ctx)}
@@ -128,19 +133,19 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
         </div>
 
         <div class="toolbar__group">
-          <ToolButton icon="branch" label="Branch" labels={labels} disabled={!head.sha} title={`Create a branch at HEAD (${mod}B)`} onClick={() => head.sha && createBranchAt(ctx, head.sha)} />
+          <ToolButton icon="branch" label="Branch" labels={labels} busy={isPending(state, 'branch:create')} disabled={!head.sha} title={`Create a branch at HEAD (${mod}B)`} onClick={() => head.sha && createBranchAt(ctx, head.sha)} />
         </div>
 
         <div class="toolbar__group">
-          <ToolButton icon="stash" label="Stash" labels={labels} disabled={!dirty} title="Stash all uncommitted changes" onClick={() => send(ctx, 'stash:save', { message: wipLabel || undefined })} />
-          <ToolButton icon="pop" label="Pop" labels={labels} disabled={stashes.length === 0} title={stashes[0] ? `Pop "${stashes[0].message}"` : 'No stashes'} onClick={() => send(ctx, 'stash:pop', {})} />
+          <ToolButton icon="stash" label="Stash" labels={labels} busy={isPending(state, 'stash:save')} disabled={!dirty} title="Stash all uncommitted changes" onClick={() => send(ctx, 'stash:save', { message: wipLabel || undefined })} />
+          <ToolButton icon="pop" label="Pop" labels={labels} busy={isPending(state, 'stash:pop')} disabled={stashes.length === 0} title={stashes[0] ? `Pop "${stashes[0].message}"` : 'No stashes'} onClick={() => send(ctx, 'stash:pop', {})} />
         </div>
 
         {(repo?.lfs || repo?.sparse.enabled) && (
           <div class="toolbar__group">
             {repo?.lfs && (
               <div class="split-btn">
-                <ToolButton icon="box" label="LFS" labels={labels} title="Git LFS" onClick={() => setLfsOpen(open => !open)} />
+                <ToolButton icon="box" label="LFS" labels={labels} busy={isPending(state, 'lfs:run')} title="Git LFS" onClick={() => setLfsOpen(open => !open)} />
                 {lfsOpen && (
                   <Popover onClose={() => setLfsOpen(false)}>
                     {(['pull', 'fetch', 'prune'] as const).map(action => (
@@ -152,7 +157,7 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
                 )}
               </div>
             )}
-            {repo?.sparse.enabled && <ToolButton icon="filter" label="Sparse" labels={labels} title="Sparse checkout settings" onClick={() => sparseDialog(ctx)} />}
+            {repo?.sparse.enabled && <ToolButton icon="filter" label="Sparse" labels={labels} busy={isPending(state, 'sparse:set')} title="Sparse checkout settings" onClick={() => sparseDialog(ctx)} />}
           </div>
         )}
 
@@ -214,14 +219,16 @@ type ToolButtonProps = {
   title?: string;
   badge?: string;
   disabled?: boolean;
+  /** The button's operation is in flight: the icon shows a spinner. */
+  busy?: boolean;
   onClick: () => void;
 };
 
-function ToolButton({ icon, label, labels, title, badge, disabled, onClick }: ToolButtonProps) {
+function ToolButton({ icon, label, labels, title, badge, disabled, busy, onClick }: ToolButtonProps) {
   return (
-    <button class="tool-btn" title={title ?? label} aria-label={label} disabled={disabled} onClick={onClick}>
+    <button class="tool-btn" title={title ?? label} aria-label={label} aria-busy={busy} disabled={disabled} onClick={onClick}>
       <span class="tool-btn__icon">
-        <Icon name={icon} size={16} />
+        {busy ? <Spinner size={14} label={`${label} in progress`} /> : <Icon name={icon} size={16} />}
         {badge && <span class="tool-btn__badge">{badge}</span>}
       </span>
       {labels && <span class="tool-btn__label">{label}</span>}

@@ -1,7 +1,8 @@
-import type { Ctx } from '../lib/ui';
+import { isPending, type Ctx } from '../lib/ui';
 import { Icon } from '../lib/icons';
 import { NONE, createBranchAt, forcePushDialog, send } from '../lib/actions';
 import { plural } from '../lib/format';
+import { Spinner } from './Spinner';
 
 /** Display name of a visibility id: `refs/heads/x`, `refs/remotes/o/x`, `refs/tags/x`, `remote:o`, `stash:<sha>`. */
 function soloLabel(id: string): string {
@@ -33,12 +34,13 @@ export function Banners({ ctx }: { ctx: Ctx }) {
             {conflicts > 0 ? `${plural(conflicts, 'conflicted file')} to resolve` : 'no conflicts left'}
           </span>
           <span class="banner__actions">
-            <button class="btn btn--small" onClick={() => send(ctx, 'op:abort', NONE)}>Abort {OPERATION_LABEL[operation.kind]}</button>
+            <button class="btn btn--small" onClick={() => send(ctx, 'op:abort', NONE)}>{isPending(state, 'op:abort') && <Spinner />}Abort {OPERATION_LABEL[operation.kind]}</button>
             {(operation.kind === 'rebase' || operation.kind === 'cherry-pick') && (
-              <button class="btn btn--small" onClick={() => send(ctx, 'op:skip', NONE)}>Skip</button>
+              <button class="btn btn--small" onClick={() => send(ctx, 'op:skip', NONE)}>{isPending(state, 'op:skip') && <Spinner />}Skip</button>
             )}
             {operation.kind !== 'merge' && (
               <button class="btn btn--small btn--primary" disabled={conflicts > 0} onClick={() => send(ctx, 'op:continue', NONE)}>
+                {isPending(state, 'op:continue') && <Spinner />}
                 Continue {OPERATION_LABEL[operation.kind]}
               </button>
             )}
@@ -75,8 +77,8 @@ export function Banners({ ctx }: { ctx: Ctx }) {
             {head.branch} and {head.upstream} have diverged (↑{head.ahead} ↓{head.behind}). After a rewrite (amend, squash, rebase) the local branch is behind the remote.
           </span>
           <span class="banner__actions">
-            <button class="btn btn--small" onClick={() => send(ctx, 'remote:pull', {})}>Pull</button>
-            <button class="btn btn--small btn--danger" onClick={() => forcePushDialog(ctx)}>Force Push</button>
+            <button class="btn btn--small" onClick={() => send(ctx, 'remote:pull', {})}>{isPending(state, 'remote:pull') && <Spinner />}Pull</button>
+            <button class="btn btn--small btn--danger" onClick={() => forcePushDialog(ctx)}>{isPending(state, 'remote:push') && <Spinner />}Force Push</button>
           </span>
         </div>
       )}

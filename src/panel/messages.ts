@@ -163,8 +163,16 @@ export type ClientState = {
   conflicts: ConflictState;
   allFiles: { rev: string; files: string[] } | null;
   busy: string | null;
+  /** Operations in flight, for spinners on the buttons and references they act on. */
+  pending: PendingOp[];
   avatars: Record<string, string>;
 };
+
+/**
+ * An operation in flight. `refs` names the references it acts on: `local:<branch>`,
+ * `remote:<remote>/<branch>`, `remote:<remote>`, `tag:<name>`, `stash:<ref>`.
+ */
+export type PendingOp = { id: number; op: OpName; refs: string[] };
 
 /** Actions the extension asks the webview to perform (shortcuts and palette commands). */
 export type WebviewAction =
@@ -322,4 +330,65 @@ export function parseWebviewMessage(raw: unknown): WebviewToExtensionMessage | n
   if (typeof type !== 'string' || !(type in OP_NAMES)) return null;
   const payload = (raw as { payload?: unknown }).payload;
   return { type, payload: typeof payload === 'object' && payload !== null ? payload : {} } as WebviewToExtensionMessage;
+}
+
+type RefsOf = { [K in OpName]?: (payload: Ops[K], head: string | null, remotes: string[]) => string[] };
+
+const none = () => [];
+const local = (name: string | null | undefined) => (name ? [`local:${name}`] : []);
+const allRemotes = (remotes: string[]) => remotes.map(name => `remote:${name}`);
+
+/** Ops that can run for seconds and are shown as pending; all others complete without a spinner. */
+const PENDING_REFS: RefsOf = {
+  'remote:fetch': (p, _head, remotes) => (p.remote ? [`remote:${p.remote}`] : allRemotes(remotes)),
+  'remote:pull': (p, head, remotes) => (p.mode === 'fetch' ? allRemotes(remotes) : local(head)),
+  'remote:push': (_p, head) => local(head),
+  'remote:add': p => [`remote:${p.name}`],
+  'remote:edit': p => [`remote:${p.name}`],
+  'remote:remove': p => [`remote:${p.name}`],
+  'branch:checkout': p => local(p.name),
+  'branch:checkoutRemote': p => [`remote:${p.remote}/${p.branch}`],
+  'branch:create': none,
+  'branch:rename': p => local(p.from),
+  'branch:delete': p => p.names.flatMap(local),
+  'branch:deleteRemote': p => [`remote:${p.remote}/${p.branch}`],
+  'branch:setUpstream': p => local(p.branch),
+  'branch:fastForward': p => local(p.branch),
+  'branch:pull': p => local(p.branch),
+  'branch:merge': (p, head) => local(p.into ?? head),
+  'branch:rebase': (p, head) => local(p.branch ?? head),
+  'branch:rebaseRange': (_p, head) => local(head),
+  'branch:pushTo': p => [...local(p.branch), `remote:${p.remote}/${p.remoteBranch}`],
+  'tag:create': none,
+  'tag:delete': p => [`tag:${p.name}`],
+  'tag:deleteRemote': p => [`tag:${p.name}`],
+  'tag:push': p => [`tag:${p.name}`],
+  'tag:annotate': p => [`tag:${p.name}`],
+  'tag:fastForward': p => [`tag:${p.name}`],
+  'stash:save': none,
+  'stash:apply': p => [`stash:${p.ref}`],
+  'stash:pop': p => [`stash:${p.ref ?? 'stash@{0}'}`],
+  'stash:drop': p => [`stash:${p.ref}`],
+  'commit:create': (p, head) => (p.push ? local(head) : []),
+  'commit:revert': none,
+  'commit:reset': (p, head) => local(p.branch ?? head),
+  'commit:cherryPick': none,
+  'commit:squash': none,
+  'commit:drop': none,
+  'commit:checkout': none,
+  'op:continue': none,
+  'op:abort': none,
+  'op:skip': none,
+  'rebase:start': none,
+  'undo': none,
+  'redo': none,
+  'lfs:run': none,
+  'sparse:set': none,
+  'conflicts:check': none,
+};
+
+/** The pending entry for a message, or null for ops that complete without a spinner. */
+export function pendingOf(message: WebviewToExtensionMessage, head: string | null, remotes: string[]): Omit<PendingOp, 'id'> | null {
+  const refs = PENDING_REFS[message.type] as ((payload: unknown, head: string | null, remotes: string[]) => string[]) | undefined;
+  return refs ? { op: message.type, refs: refs(message.payload, head, remotes) } : null;
 }

@@ -3,7 +3,7 @@ import type { LaneCommit } from '../../git/graph';
 import type { ColumnId, ColumnPrefs } from '../../panel/messages';
 import type { MenuItem } from '../components/ContextMenu';
 import type { Ctx, DragRef, InlineRequest } from '../lib/ui';
-import { branchNameError, getDragRef, isRefDrag, setDragRef } from '../lib/ui';
+import { branchNameError, getDragRef, isRefDrag, isRefPending, setDragRef } from '../lib/ui';
 import { Icon } from '../lib/icons';
 import { avatarColor, fullDate, initials, parseRefs, relativeDate, shortSha, type ParsedRef } from '../lib/format';
 import {
@@ -13,6 +13,7 @@ import {
 import { isTyping, primary } from '../lib/events';
 import { useAutoFocus } from '../lib/persist';
 import { GraphRail, LANE_WIDTH, ROW_HEIGHT, buildEdges } from './GraphRail';
+import { Spinner } from '../components/Spinner';
 
 export type SearchState = { active: boolean; matches: Set<string>; current: string | null };
 
@@ -383,6 +384,12 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
   for (let row = start; row <= end; row += 1) visibleRows.push({ row, commit: row < rowOffset ? null : commitLog[row - rowOffset] });
   const changedCount = new Set([...workingTreeStatus.staged, ...workingTreeStatus.unstaged, ...workingTreeStatus.conflicted].map(file => file.path)).size;
 
+  function pillPending(group: PillGroup): boolean {
+    if (group.local && isRefPending(state, `local:${group.local}`)) return true;
+    if (group.tag && isRefPending(state, `tag:${group.tag}`)) return true;
+    return group.remotes.some(entry => isRefPending(state, `remote:${entry.remote}/${entry.branch}`));
+  }
+
   function renderPill(group: PillGroup, commit: LaneCommit, inPopover: boolean) {
     const tag = group.tag ? state.tags.find(entry => entry.name === group.tag) : undefined;
     const dragRef: DragRef | null = group.local
@@ -426,6 +433,7 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
         {group.local && !group.head && <Icon name="computer" size={10} />}
         {group.remotes.length > 0 && <Icon name="cloud" size={10} />}
         <span class="ref-pill__text">{group.label}</span>
+        {pillPending(group) && <Spinner size={9} />}
         {inPopover && group.remotes.length > 0 && <span class="ref-pill__remotes">{group.remotes.map(entry => entry.remote).join(', ')}</span>}
       </span>
     );
@@ -457,7 +465,12 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
     return (
       <span class="refs-cell" onPointerEnter={() => setExpanded(commit.sha)} onPointerLeave={() => setExpanded(null)}>
         {renderPill(groups[0], commit, false)}
-        {groups.length > 1 && <span class="ref-pill ref-pill--more">+{groups.length - 1}</span>}
+        {groups.length > 1 && (
+          <span class="ref-pill ref-pill--more">
+            +{groups.length - 1}
+            {groups.slice(1).some(pillPending) && <Spinner size={9} />}
+          </span>
+        )}
         {isExpanded && <span class="refs-popover">{groups.map(group => renderPill(group, commit, true))}</span>}
       </span>
     );
