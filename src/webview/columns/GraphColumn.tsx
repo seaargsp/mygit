@@ -662,9 +662,9 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
 
         {commitLog.length === 0 && (
           <p class="graph__empty">
-            {repoPrefs.hidden.length > 0 || repoPrefs.smartVisibility
+            {state.loading.graph ? <><Spinner /> Loading commits…</> : repoPrefs.hidden.length > 0 || repoPrefs.smartVisibility
               ? 'No commits on the visible references. Show hidden references or turn off Smart Branch Visibility.'
-              : head.sha ? 'Loading commits…' : 'This repository has no commits yet.'}
+              : 'This repository has no commits yet.'}
           </p>
         )}
 

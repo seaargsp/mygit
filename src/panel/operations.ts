@@ -203,7 +203,7 @@ async function openExternalDiff(store: Store, file: OpenFile): Promise<void> {
     else if (file.source === 'commit') args.push(`${file.sha}^`, file.sha);
     else if (file.source === 'range') args.push(file.base ?? EMPTY_TREE, file.sha);
     args.push('--', file.path);
-    void runGit(repoPath, args).catch(error => vscode.window.showErrorMessage(String(error.message ?? error)));
+    void runGit(repoPath, args, { timeoutMs: 0 }).catch(error => vscode.window.showErrorMessage(String(error.message ?? error)));
     return;
   }
   let left: string;
@@ -499,7 +499,7 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
     case 'merge:external': {
       const uri = vscode.Uri.file(path.join(repoPath, message.payload.path));
       if (config().get<string>('mergeTool', 'vscode') === 'gitConfig') {
-        void runGit(repoPath, ['mergetool', '-y', '--', message.payload.path]).then(() => store.refreshWorking(), error => vscode.window.showErrorMessage(String(error.message ?? error)));
+        void runGit(repoPath, ['mergetool', '-y', '--', message.payload.path], { timeoutMs: 0 }).then(() => store.refreshWorking(), error => vscode.window.showErrorMessage(String(error.message ?? error)));
         return;
       }
       await vscode.commands.executeCommand('git.openMergeEditor', uri).then(undefined, () => vscode.commands.executeCommand('vscode.open', uri));

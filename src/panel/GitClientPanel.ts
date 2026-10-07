@@ -42,10 +42,11 @@ export class ClientPanel {
   private constructor(
     readonly panel: vscode.WebviewPanel,
     private readonly extensionUri: vscode.Uri,
-    handlers: PanelHandlers
+    handlers: PanelHandlers,
+    setHtml = true
   ) {
     panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'mygit.svg');
-    panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
+    if (setHtml) panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
     panel.webview.onDidReceiveMessage(raw => {
       const message = parseWebviewMessage(raw);
       if (!message) return;
@@ -65,10 +66,19 @@ export class ClientPanel {
     return new ClientPanel(panel, extensionUri, handlers);
   }
 
-  /** Restored panels (window reload, extension host restart) arrive without options or HTML. */
-  static restore(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, handlers: PanelHandlers): ClientPanel {
+  /**
+   * Restored panels (window reload, extension host restart) arrive without options or HTML.
+   * The document loads before the repository resolves, so the shell draws while git starts.
+   */
+  static prepare(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): void {
     panel.webview.options = getWebviewOptions(extensionUri);
-    return new ClientPanel(panel, extensionUri, handlers);
+    panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'mygit.svg');
+    panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
+  }
+
+  /** Attaches to a panel set up by `prepare`, keeping its loaded document. */
+  static attach(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, handlers: PanelHandlers): ClientPanel {
+    return new ClientPanel(panel, extensionUri, handlers, false);
   }
 
   post(message: ExtensionToWebviewMessage): void {

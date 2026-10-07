@@ -33,10 +33,12 @@ function parseTrack(track: string): { ahead: number; behind: number; gone: boole
   return { ahead: ahead ? Number(ahead[1]) : 0, behind: behind ? Number(behind[1]) : 0, gone: track.includes('gone') };
 }
 
-export async function listBranches(repoPath: string): Promise<{ local: BranchRef[]; remote: RemoteGroup[] }> {
+/** `track: false` leaves out the ahead/behind counts, which walk history for every branch. */
+export async function listBranches(repoPath: string, opts: { track?: boolean } = {}): Promise<{ local: BranchRef[]; remote: RemoteGroup[] }> {
+  const track = opts.track === false ? '' : '%(upstream:track,nobracket)';
   const output = await runGit(repoPath, [
     'for-each-ref',
-    `--format=%(refname)${F}%(objectname)${F}%(HEAD)${F}%(upstream:short)${F}%(upstream:track,nobracket)${R}`,
+    `--format=%(refname)${F}%(objectname)${F}%(HEAD)${F}%(upstream:short)${F}${track}${R}`,
     'refs/heads',
     'refs/remotes',
   ]);

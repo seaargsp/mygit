@@ -163,6 +163,8 @@ export type ClientState = {
   conflicts: ConflictState;
   allFiles: { rev: string; files: string[] } | null;
   busy: string | null;
+  /** Parts whose first load is still running; the webview shows a spinner in their place. */
+  loading: { refs: boolean; status: boolean; graph: boolean };
   /** Operations in flight, for spinners on the buttons and references they act on. */
   pending: PendingOp[];
   avatars: Record<string, string>;

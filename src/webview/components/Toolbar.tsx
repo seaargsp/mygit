@@ -68,7 +68,7 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
         <span class="context-field">
           <span class="context-field__label">Branch</span>
           <span class="context-field__value" title={head.branch ?? head.sha ?? ''}>
-            {head.branch ?? (head.sha ? `HEAD ${head.sha.slice(0, 7)}` : 'no commits')}
+            {head.branch ?? (head.sha ? `HEAD ${head.sha.slice(0, 7)}` : state.loading.refs ? '…' : 'no commits')}
           </span>
         </span>
       </div>

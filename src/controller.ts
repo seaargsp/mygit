@@ -15,6 +15,8 @@ const WORKING_DEBOUNCE_MS = 300;
 const GIT_DEBOUNCE_MS = 150;
 const CONFLICT_DEBOUNCE_MS = 2000;
 const MIN_FETCH_SECONDS = 10;
+/** Delay after the first load before the commit-graph write and the first fetch compete with the panel for disk and CPU. */
+const STARTUP_BACKGROUND_DELAY_MS = 3000;
 
 /** Paths under .git whose change means refs, HEAD or an in-progress operation moved. */
 const GIT_STATE = /^(HEAD|ORIG_HEAD|packed-refs|FETCH_HEAD|MERGE_HEAD|MERGE_MSG|REBASE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|config|refs\/.*|logs\/refs\/stash|rebase-merge(\/.*)?|rebase-apply(\/.*)?|info\/sparse-checkout)$/;
@@ -31,6 +33,7 @@ export class RepositoryController implements vscode.Disposable, Host {
   private gitTimer: ReturnType<typeof setTimeout> | undefined;
   private conflictTimer: ReturnType<typeof setTimeout> | undefined;
   private fetchTimer: ReturnType<typeof setInterval> | undefined;
+  private startupTimer: ReturnType<typeof setTimeout> | undefined;
   private fetching = false;
   private lastConflictKey = '';
 
@@ -75,9 +78,11 @@ export class RepositoryController implements vscode.Disposable, Host {
     }));
 
     this.log.application(`Repository opened: ${repoPath}`);
-    void this.store.refreshAll().then(async () => {
-      await this.ensureCommitGraph();
-      await this.autoFetch();
+    void this.store.refreshAll().then(() => {
+      this.startupTimer = setTimeout(async () => {
+        await this.ensureCommitGraph();
+        await this.autoFetch();
+      }, STARTUP_BACKGROUND_DELAY_MS);
     });
   }
 
@@ -86,7 +91,7 @@ export class RepositoryController implements vscode.Disposable, Host {
   private panelHandlers() {
     return {
       onMessage: (message: WebviewToExtensionMessage) => this.dispatch(message),
-      onReady: () => this.panel?.post({ type: 'state:update', payload: this.store.getState() }),
+      onReady: () => this.panel?.post({ type: 'state:update', payload: this.store.loadedState() }),
       onDispose: () => {
         this.panel = undefined;
       },
@@ -104,9 +109,11 @@ export class RepositoryController implements vscode.Disposable, Host {
     return this.panel;
   }
 
+  /** Takes over a restored panel; its `ready` may already have been sent, so the state goes out now. */
   restorePanel(panel: vscode.WebviewPanel): void {
     this.panel?.panel.dispose();
-    this.panel = ClientPanel.restore(panel, this.context.extensionUri, this.panelHandlers());
+    this.panel = ClientPanel.attach(panel, this.context.extensionUri, this.panelHandlers());
+    this.panel.post({ type: 'state:update', payload: this.store.loadedState() });
   }
 
   reloadPanel(): void {
@@ -193,7 +200,7 @@ export class RepositoryController implements vscode.Disposable, Host {
     try {
       const remotes = this.store.getState().remotes.map(remote => `remote:${remote.name}`);
       await this.store.track({ op: 'remote:fetch', refs: remotes }, async () => {
-        await fetch(this.repoPath, { prune: config.get('autoPrune', true), writeCommitGraph: config.get('writeCommitGraph', true) });
+        await fetch(this.repoPath, { prune: config.get('autoPrune', true), writeCommitGraph: config.get('writeCommitGraph', true), background: true });
         if (config.get('extendedLogging', false)) this.log.repository('Auto-fetch', { durationMs: Date.now() - started });
         await this.store.refreshAll();
       });
@@ -282,6 +289,7 @@ export class RepositoryController implements vscode.Disposable, Host {
     if (this.gitTimer) clearTimeout(this.gitTimer);
     if (this.conflictTimer) clearTimeout(this.conflictTimer);
     if (this.fetchTimer) clearInterval(this.fetchTimer);
+    if (this.startupTimer) clearTimeout(this.startupTimer);
     this.panel?.panel.dispose();
     for (const disposable of this.disposables) disposable.dispose();
   }

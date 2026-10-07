@@ -322,6 +322,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
   }
 
   function sectionBody(id: SectionId): ComponentChildren {
+    if (state.loading.refs && counts[id] === 0) return <li class="sidebar__empty"><Spinner /> Loading…</li>;
     switch (id) {
       case 'local':
         return localBranches.length === 0

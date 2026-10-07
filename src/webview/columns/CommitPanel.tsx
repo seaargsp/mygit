@@ -142,7 +142,9 @@ function WipPanel({ ctx, splitProps, wipLabel, setWipLabel }: Props) {
   return (
     <div class="detail" data-testid="detail-column">
       <div class="detail__head">
-        <span class="detail__head-label">{total === 0 ? 'No changes' : `${plural(total, 'file')} changed`}</span>
+        <span class="detail__head-label">
+          {state.loading.status ? <><Spinner /> Reading working tree…</> : total === 0 ? 'No changes' : `${plural(total, 'file')} changed`}
+        </span>
         {head.branch && <span class="detail__head-meta">on <span class="sha">{head.branch}</span></span>}
         <ListControls mode={mode} setMode={setMode} allFiles={allFiles} setAllFiles={setAllFiles} />
       </div>
@@ -172,7 +174,7 @@ function WipPanel({ ctx, splitProps, wipLabel, setWipLabel }: Props) {
           />
         ) : (
           <>
-            {total === 0 && !operation && <p class="detail__empty">Nothing to commit. The working directory matches HEAD.</p>}
+            {total === 0 && !operation && !state.loading.status && <p class="detail__empty">Nothing to commit. The working directory matches HEAD.</p>}
 
             {conflicted.length > 0 && (
               <section class="stage-section stage-section--conflict">

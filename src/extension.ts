@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { GIT_CLIENT_VIEW_TYPE } from './panel/GitClientPanel';
+import { ClientPanel, GIT_CLIENT_VIEW_TYPE } from './panel/GitClientPanel';
 import { LauncherView, LAUNCHER_VIEW_ID } from './panel/launcher';
 import { ActivityLog } from './panel/activityLog';
 import { RevisionContentProvider, REVISION_SCHEME } from './panel/revisionContent';
 import { RepositoryController } from './controller';
 import { registerCommands } from './commands';
 import { isSourceCheckout, watchBuildOutput } from './devReload';
-import { resolveRepoRoot, setGitBinaryPath } from './git/gitService';
+import { resolveRepoRoot, setGitBinaryPath, setGitTimeout } from './git/gitService';
 import { getGitDir } from './git/repoState';
 
 let controller: RepositoryController | undefined;
@@ -24,6 +24,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const gitExtension = vscode.extensions.getExtension('vscode.git');
   const gitPath = gitExtension?.exports?.getAPI?.(1)?.git?.path;
   if (gitPath) setGitBinaryPath(gitPath);
+  const applyTimeout = () => setGitTimeout(vscode.workspace.getConfiguration('mygit').get<number>('gitTimeout', 300) * 1000);
+  applyTimeout();
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration('mygit.gitTimeout')) applyTimeout();
+  }));
 
   const log = new ActivityLog();
   context.subscriptions.push(log);
@@ -34,7 +39,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerCommands(context, () => controller);
 
-  // Panels restored before the repository resolves wait for it.
+  // Panels restored before the repository resolves draw their shell (and the last snapshot) at
+  // once and attach when it resolves.
   const ready = (async () => {
     const repoPath = await findRepository();
     if (!repoPath) {
@@ -49,12 +55,11 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerWebviewPanelSerializer(GIT_CLIENT_VIEW_TYPE, {
       async deserializeWebviewPanel(panel) {
-        await ready;
-        if (!controller) {
-          panel.dispose();
-          return;
-        }
-        controller.restorePanel(panel);
+        ClientPanel.prepare(panel, context.extensionUri);
+        void ready.then(() => {
+          if (controller) controller.restorePanel(panel);
+          else panel.dispose();
+        });
       },
     })
   );

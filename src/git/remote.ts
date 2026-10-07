@@ -1,4 +1,4 @@
-import { runGit, GitError } from './gitService';
+import { runGit, GitError, NON_INTERACTIVE_ENV } from './gitService';
 
 export async function checkoutBranch(repoPath: string, ref: string): Promise<void> {
   await runGit(repoPath, ['checkout', ref]);
@@ -94,12 +94,19 @@ export async function moveBranch(repoPath: string, branch: string, sha: string):
   await runGit(repoPath, ['branch', '-f', branch, sha]);
 }
 
-export async function fetch(repoPath: string, opts: { remote?: string; prune: boolean; writeCommitGraph?: boolean }): Promise<void> {
+/** Upper bound for an automatic fetch: a stalled network or remote must not hold the fetch slot. */
+const BACKGROUND_FETCH_TIMEOUT_MS = 60_000;
+
+export async function fetch(
+  repoPath: string,
+  opts: { remote?: string; prune: boolean; writeCommitGraph?: boolean; background?: boolean }
+): Promise<void> {
   // fetch.writeCommitGraph extends the commit-graph with the fetched commits.
   const args = opts.writeCommitGraph ? ['-c', 'fetch.writeCommitGraph=true', 'fetch'] : ['fetch'];
   args.push(opts.remote ?? '--all');
   if (opts.prune) args.push('--prune');
-  await runGit(repoPath, args);
+  // A background fetch has no user to answer a credential prompt: it fails instead of waiting.
+  await runGit(repoPath, args, opts.background ? { env: NON_INTERACTIVE_ENV, timeoutMs: BACKGROUND_FETCH_TIMEOUT_MS } : {});
 }
 
 export type PullMode = 'fetch' | 'ff' | 'ff-only' | 'rebase';

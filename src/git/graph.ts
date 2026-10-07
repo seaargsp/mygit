@@ -38,6 +38,8 @@ export async function getCommitLog(
     '--stdin',
     `--skip=${opts.offset}`,
     '--date-order',
+    // log.showSignature would run gpg once per commit.
+    '--no-show-signature',
     '--decorate=short',
     `--pretty=format:%H${FIELD_SEP}%P${FIELD_SEP}%an${FIELD_SEP}%ae${FIELD_SEP}%aI${FIELD_SEP}%cI${FIELD_SEP}%s${FIELD_SEP}%D${FIELD_SEP}%b${RECORD_SEP}`,
     ...pseudo,

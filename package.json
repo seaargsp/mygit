@@ -332,12 +332,18 @@
           "type": "number",
           "default": 120,
           "minimum": 0,
-          "description": "Seconds between automatic fetches of all remotes (minimum 10). The first fetch runs when the repository opens. 0 disables auto-fetch."
+          "description": "Seconds between automatic fetches of all remotes (minimum 10). The first fetch runs a few seconds after the repository opens. 0 disables auto-fetch."
         },
         "mygit.writeCommitGraph": {
           "type": "boolean",
           "default": true,
           "description": "Write a commit-graph file (git commit-graph write) when the repository has none, and extend it on fetch. Speeds up graph loading on large repositories."
+        },
+        "mygit.gitTimeout": {
+          "type": "number",
+          "default": 300,
+          "minimum": 0,
+          "description": "Seconds after which a git command is stopped and reported as failed (a credential prompt, ssh or a hook that never returns). External diff and merge tools are exempt. Automatic fetches stop after 60 seconds and never prompt for credentials. 0 disables the limit."
         },
         "mygit.autoPrune": {
           "type": "boolean",

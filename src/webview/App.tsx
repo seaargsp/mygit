@@ -20,7 +20,7 @@ import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
 import { setDatePrefs, plural } from './lib/format';
 import { emit, isTyping, primary } from './lib/events';
-import { usePersisted } from './lib/persist';
+import { loadPersisted, savePersisted, usePersisted } from './lib/persist';
 import { NONE, createFileDialog, createRefDialog, renameDialog, send, sparseDialog, templateDialog } from './lib/actions';
 
 const EMPTY_STATE: ClientState = {
@@ -52,11 +52,27 @@ const EMPTY_STATE: ClientState = {
   allFiles: null,
   busy: null,
   pending: [],
+  loading: { refs: true, status: true, graph: true },
   avatars: {},
 };
 
+/** Graph rows kept in the snapshot: enough to fill the first screens. */
+const SNAPSHOT_ROWS = 300;
+const SNAPSHOT_KEY = 'snapshot';
+
+type Snapshot = Pick<ClientState, 'repoName' | 'head' | 'branches' | 'tags' | 'remotes' | 'stashes' | 'commitLog' | 'prefs' | 'repoPrefs'>;
+
+/**
+ * Last loaded references and graph rows, drawn on a restored panel until the extension sends
+ * fresh ones. The loading flags stay set, so the parts read as provisional.
+ */
+function initialState(): ClientState {
+  const snapshot = loadPersisted<Snapshot | null>(SNAPSHOT_KEY, null);
+  return snapshot ? { ...EMPTY_STATE, ...snapshot } : EMPTY_STATE;
+}
+
 export function useClientState(onAction: (action: WebviewAction) => void): [ClientState, (message: WebviewToExtensionMessage) => void] {
-  const [state, setState] = useState<ClientState>(EMPTY_STATE);
+  const [state, setState] = useState<ClientState>(initialState);
   const actionRef = useRef(onAction);
   actionRef.current = onAction;
 
@@ -68,6 +84,14 @@ export function useClientState(onAction: (action: WebviewAction) => void): [Clie
     getVsCodeApi().postMessage({ type: 'ready', payload: {} });
     return off;
   }, []);
+
+  const loaded = !state.loading.refs && !state.loading.graph;
+  useEffect(() => {
+    if (!loaded) return;
+    const { repoName, head, branches, tags, remotes, stashes, commitLog, prefs, repoPrefs } = state;
+    const snapshot: Snapshot = { repoName, head, branches, tags, remotes, stashes, commitLog: commitLog.slice(0, SNAPSHOT_ROWS), prefs, repoPrefs };
+    savePersisted(SNAPSHOT_KEY, snapshot);
+  }, [loaded, state.repoName, state.head, state.branches, state.tags, state.remotes, state.stashes, state.commitLog, state.prefs, state.repoPrefs]);
 
   const dispatch = useCallback((message: WebviewToExtensionMessage) => getVsCodeApi().postMessage(message), []);
   return [state, dispatch];
@@ -324,6 +348,7 @@ export function App() {
   }
 
   const loaded = state.commitLog.filter(commit => !commit.stash).length;
+  const loadingRepo = state.loading.refs || state.loading.status || state.loading.graph;
 
   return (
     <div class={`git-client-app${logOpen ? ' git-client-app--log' : ''}`} style={style} data-testid="git-client-app">
@@ -371,8 +396,9 @@ export function App() {
       )}
 
       <footer class="statusbar">
-        <span class={`statusbar__busy${state.busy ? ' statusbar__busy--on' : ''}`}>
-          {state.busy ? <><span class="spinner" aria-hidden="true" />{state.busy}…</> : 'Ready'}
+        <span class={`statusbar__busy${state.busy || loadingRepo ? ' statusbar__busy--on' : ''}`}>
+          {state.busy ? <><span class="spinner" aria-hidden="true" />{state.busy}…</>
+            : loadingRepo ? <><span class="spinner" aria-hidden="true" />Loading repository…</> : 'Ready'}
         </span>
         <span class="statusbar__info">
           {plural(loaded, 'commit')} loaded{state.hasMore ? ' (more available)' : ''}

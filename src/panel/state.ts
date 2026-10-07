@@ -15,7 +15,7 @@ import {
 import { UndoJournal } from './undo';
 import type { ActivityLog } from './activityLog';
 import { runGit, setGitLogger, GitError, type GitLogEntry } from '../git/gitService';
-import { listBranches, listRemotes, listStashes, listTags, defaultBranch, revParse } from '../git/refs';
+import { listBranches, listRemotes, listStashes, listTags, defaultBranch, revParse, type BranchRef } from '../git/refs';
 import { assignLanes, firstParentChain, getCommitLog, insertStashes, reachableFrom, type CommitNode } from '../git/graph';
 import { EMPTY_STATUS, getWorkingTreeStatus, listAllFiles } from '../git/status';
 import { getCommitDetail, getCommitTemplate, getHeadMessage, applyTemplate } from '../git/commit';
@@ -23,7 +23,7 @@ import {
   getBlame, getCommitFileDiff, getFileContent, getFileHistory, getRangeFileDiff, getRangeFiles, getWorkingFileDiff,
   type FileDiff,
 } from '../git/diff';
-import { getRepoState, isHeadPushed } from '../git/repoState';
+import { getRepoState, headSha, isHeadPushed } from '../git/repoState';
 import { getStashFiles } from '../git/stash';
 
 /** Tree of an empty repository: the left side of a root commit's diff. */
@@ -50,6 +50,9 @@ export function readPrefs(): Prefs {
     conflictDetection: config.get('conflictDetection', true),
   };
 }
+
+/** Rows read before the full first page on the initial graph load. */
+const FIRST_PAGE = 200;
 
 function initialCommitLimit(): number {
   return Math.max(500, vscode.workspace.getConfiguration('mygit').get('initialCommits', 2000));
@@ -125,6 +128,7 @@ export class Store {
       allFiles: null,
       busy: null,
       pending: [],
+      loading: { refs: true, status: true, graph: true },
       avatars: {},
     };
     deps.log.onChange(() => this.setState({ log: { app: [...deps.log.app], repo: [...deps.log.repo] } }));
@@ -132,6 +136,19 @@ export class Store {
 
   getState(): ClientState {
     return this.state;
+  }
+
+  /** The state for a full webview update, without the parts still loading (the webview keeps its snapshot of those). */
+  loadedState(): Partial<ClientState> {
+    const { loading } = this.state;
+    const { branches, tags, remotes, stashes, head, commitLog, hasMore, workingTreeStatus, ...rest } = this.state;
+    return {
+      ...rest,
+      ...(loading.refs ? {} : { branches, tags, remotes, stashes }),
+      ...(loading.refs && loading.status ? {} : { head }),
+      ...(loading.graph ? {} : { commitLog, hasMore }),
+      ...(loading.status ? {} : { workingTreeStatus }),
+    };
   }
 
   subscribe(listener: (patch: Partial<ClientState>) => void): () => void {
@@ -188,7 +205,12 @@ export class Store {
       return this.refreshing;
     }
     this.refreshing = this.doRefreshAll()
-      .catch(error => this.deps.log.application(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`, 'error'))
+      .catch(error => {
+        this.deps.log.application(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        // A failed first load must not leave its parts drawn as loading.
+        const { loading } = this.state;
+        if (loading.refs || loading.status || loading.graph) this.setState({ loading: { refs: false, status: false, graph: false } });
+      })
       .finally(() => {
         this.refreshing = null;
         if (this.refreshQueued) {
@@ -199,52 +221,101 @@ export class Store {
     return this.refreshing;
   }
 
+  /**
+   * Publishes each part as soon as it resolves, so the shell fills in order of cost: references
+   * (milliseconds even on a cold cache), then the first graph page, upstream counts, status (a
+   * stat of every tracked file) and the full graph page.
+   */
   private async doRefreshAll(): Promise<void> {
+    const initial = this.state.loading.refs;
     // With nothing hidden the graph's revisions are known up front, so the log (the slowest
     // query on large repositories) runs alongside the reference and status queries.
-    const graphLog = this.unfilteredGraph()
-      ? revParse(this.repoPath, 'HEAD').then(head => getCommitLog(this.repoPath, {
-        revs: ['--branches', '--remotes', '--tags', ...(head ? ['HEAD'] : [])],
-        limit: this.limit,
-        offset: 0,
-      }))
+    const graph = this.unfilteredGraph()
+      ? this.loadGraph(async () => {
+        const head = await revParse(this.repoPath, 'HEAD');
+        return ['--branches', '--remotes', '--tags', ...(head ? ['HEAD'] : [])];
+      })
       : null;
-    const [branches, tags, remotes, stashes, status, repoState, headMessage, pushed, template] = await Promise.all([
-      listBranches(this.repoPath),
-      listTags(this.repoPath),
-      listRemotes(this.repoPath),
-      listStashes(this.repoPath),
-      getWorkingTreeStatus(this.repoPath),
+    const status = getWorkingTreeStatus(this.repoPath).then(result => {
+      this.setState({
+        workingTreeStatus: result,
+        head: this.headInfo(result.branch, this.state.head.message, this.state.head.pushed),
+        loading: { ...this.state.loading, status: false },
+      });
+    });
+    // Rejections surface through the Promise.all below; until then they must not count as unhandled.
+    for (const part of [graph, status]) part?.catch(() => undefined);
+    const metaQueries = Promise.all([
       getRepoState(this.repoPath, this.gitDir),
       getHeadMessage(this.repoPath),
       isHeadPushed(this.repoPath),
       getCommitTemplate(this.repoPath),
     ]);
+    metaQueries.catch(() => undefined);
+
+    // Upstream ahead/behind counts walk history per branch: the first load lists the
+    // branches without them and fills them in afterwards.
+    const [branches, tags, remotes, stashes, sha] = await Promise.all([
+      listBranches(this.repoPath, { track: !initial }),
+      listTags(this.repoPath),
+      listRemotes(this.repoPath),
+      listStashes(this.repoPath),
+      initial ? headSha(this.repoPath) : Promise.resolve(null),
+    ]);
+    this.setState({ branches, tags, remotes, stashes, undo: this.journal.labels(), loading: { ...this.state.loading, refs: false } });
+    if (this.state.loading.status) this.setState({ head: this.provisionalHead(branches.local, sha) });
+    if (this.rawLog.length > 0) this.publishLog();
+
+    // Published after the references: a head patch before them would replace the webview's
+    // snapshot head with an empty one.
+    const meta = metaQueries.then(([repoState, message, pushed, template]) => {
+      const { gitDir: _gitDir, ...repo } = repoState;
+      this.setState({
+        repo,
+        head: { ...this.state.head, message, pushed },
+        template: template.path ? applyTemplate(template, this.state.prefs.removeTemplateComments) : null,
+      });
+    });
+
+    const tracked = initial ? listBranches(this.repoPath).then(result => this.setState({ branches: result })) : null;
+    tracked?.catch(() => undefined);
     const targetBranch = this.state.targetBranch ?? (await defaultBranch(this.repoPath, remotes.map(remote => remote.name)))
       ?? (branches.local.some(branch => branch.name === 'main') ? 'main' : branches.local.some(branch => branch.name === 'master') ? 'master' : null);
-    const { gitDir: _gitDir, ...repo } = repoState;
-    const prepared = template.path ? applyTemplate(template, this.state.prefs.removeTemplateComments) : null;
+    this.setState({ targetBranch });
 
-    this.setState({
-      branches,
-      tags,
-      remotes,
-      stashes,
-      workingTreeStatus: status,
-      head: this.headInfo(status.branch, headMessage, pushed),
-      repo,
-      template: prepared,
-      targetBranch,
-      undo: this.journal.labels(),
-    });
-    if (graphLog) {
-      this.rawLog = await graphLog;
-      this.publishLog();
-    } else {
-      await this.refreshGraph();
-    }
+    await Promise.all([status, meta, tracked, graph ?? this.loadGraph(async () => this.visibleRevs())]);
     await this.refreshSelection();
     await this.refreshView();
+  }
+
+  /** HEAD from the reference listing, shown until the status scan reports it. */
+  private provisionalHead(local: BranchRef[], sha: string | null): HeadInfo {
+    const current = local.find(branch => branch.isHead);
+    return {
+      ...this.state.head,
+      branch: current?.name ?? null,
+      sha: current?.sha ?? sha,
+      detached: !current && sha !== null,
+      upstream: current?.upstream ?? null,
+      ahead: current?.ahead ?? 0,
+      behind: current?.behind ?? 0,
+    };
+  }
+
+  /**
+   * Loads the graph. The first load reads a short page before the full one: on a cold cache
+   * every commit object is a disk read, and the visible rows need only the first few hundred.
+   */
+  private async loadGraph(revs: () => Promise<string[]>): Promise<void> {
+    const list = await revs();
+    if (this.state.loading.graph && (this.limit === null || this.limit > FIRST_PAGE)) {
+      this.rawLog = await getCommitLog(this.repoPath, { revs: list, limit: FIRST_PAGE, offset: 0 });
+      this.publishLog();
+      this.setState({ loading: { ...this.state.loading, graph: false } });
+    }
+    this.rawLog = await getCommitLog(this.repoPath, { revs: list, limit: this.limit, offset: 0 });
+    this.publishLog();
+    if (this.state.loading.graph) this.setState({ loading: { ...this.state.loading, graph: false } });
   }
 
   private unfilteredGraph(): boolean {
@@ -314,9 +385,7 @@ export class Store {
   }
 
   async refreshGraph(): Promise<void> {
-    const revs = this.visibleRevs();
-    this.rawLog = await getCommitLog(this.repoPath, { revs, limit: this.limit, offset: 0 });
-    this.publishLog();
+    await this.loadGraph(async () => this.visibleRevs());
   }
 
   /** Re-derives the graph rows (lanes, stashes, solo dimming) from the loaded log. */
