@@ -2,7 +2,7 @@
   "name": "vscode-git-client",
   "displayName": "mygit",
   "description": "A Git client for the workspace repository: commit graph, branches, staging, diffs, merge tool and interactive rebase.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "seaargsp",
   "license": "MIT",
   "repository": {
