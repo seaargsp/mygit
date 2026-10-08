@@ -1,6 +1,6 @@
-# GitKraken Desktop Feature Reference for the `mygit` VS Code Extension
+# Feature Reference for the `mygit` VS Code Extension
 
-Behavioural and UI/UX reference for building a GitKraken Desktop clone as a VS Code extension. Derived from the GitKraken Desktop help center (sources in Appendix A). Target: feature parity in Git functionality and UI/UX for one repository per VS Code window.
+Behavioural and UI/UX reference for building a desktop Git client as a VS Code extension, modelled on a reference desktop client and its help center. Target: feature parity in Git functionality and UI/UX for one repository per VS Code window.
 
 ---
 
@@ -13,9 +13,9 @@ Behavioural and UI/UX reference for building a GitKraken Desktop clone as a VS C
 - Not in scope:
   - Open, clone and init flows, repository tabs, tab aliases, Workspaces, the Repository Management screen, favorites.
   - Worktrees, Agent Sessions view, WSL, submodules, Team View, the integrated terminal, deep linking, forks.
-  - GitKraken account, profiles, organisation administration and licensing.
+  - Vendor account, profiles, organisation administration and licensing.
   - Hosting-provider integrations (GitHub, GitLab, Bitbucket, Azure DevOps, Jira, Trello): pull requests, issues, provider-specific remote dialogs and icons, PR status.
-  - GitKraken cloud services: GitKraken AI, Cloud Patches, Org members, GitKraken.dev, Launchpad. The extension has no connection to GitKraken.
+  - Vendor cloud services: AI features, Cloud Patches, Org members, web dashboards, Launchpad. The extension has no connection to any vendor service.
 - References to these topics inside included pages are removed from this document.
 
 ### 1.2 Feature tags
@@ -23,7 +23,7 @@ Behavioural and UI/UX reference for building a GitKraken Desktop clone as a VS C
 | Tag | Meaning |
 | --- | --- |
 | `[core]` | Local Git functionality or UI. Implementable with the `git` binary and the VS Code API. Default priority. |
-| `[inferred]` | Not stated in the help center. Describes standard GitKraken behaviour or a clone requirement needed for consistency. |
+| `[inferred]` | Not stated in the help center. Describes standard reference-client behaviour or a clone requirement needed for consistency. |
 
 Untagged items are `[core]`.
 
@@ -31,7 +31,7 @@ Untagged items are `[core]`.
 
 - Shortcuts are written `Mac / Windows-Linux`, for example `⌘Enter / Ctrl+Enter`. A single value applies to all platforms.
 - "Right-click X → Y" means the context menu of X contains item Y.
-- Menu labels use GitKraken's wording in quotes. `[branch]`, `[N]` and `[remote]` are runtime substitutions.
+- Menu labels use the reference client's wording in quotes. `[branch]`, `[N]` and `[remote]` are runtime substitutions.
 
 ### 1.4 Glossary
 
@@ -73,9 +73,9 @@ Untagged items are `[core]`.
 
 ### 2.4 Native VS Code substitutes
 
-| GitKraken facility | VS Code substitute (permitted) |
+| Reference-client facility | VS Code substitute (permitted) |
 | --- | --- |
-| Built-in file editor ("Edit file", "Edit in working directory") | Open the file in a VS Code text editor. Section 12 lists GitKraken's in-app editor behaviour if implemented in-webview. |
+| Built-in file editor ("Edit file", "Edit in working directory") | Open the file in a VS Code text editor. Section 12 lists the reference client's in-app editor behaviour if implemented in-webview. |
 | External editor preference | Not required. VS Code is the editor. |
 | Command Palette (`⌘P / Ctrl+P`) | In-webview palette, or VS Code QuickPick commands contributed under a `mygit:` prefix. |
 | Toasts / snackbars | `vscode.window.show*Message` or in-webview toasts. |
@@ -84,7 +84,7 @@ Untagged items are `[core]`.
 
 ### 2.5 Shortcut collisions
 
-GitKraken shortcuts that collide with VS Code defaults are bound only when the client UI has focus (`when` clause on the webview / view focus context). Section 29 lists each collision.
+Reference-client shortcuts that collide with VS Code defaults are bound only when the client UI has focus (`when` clause on the webview / view focus context). Section 29 lists each collision.
 
 ---
 
@@ -316,7 +316,7 @@ Merge and rebase run against the checked-out branch: the target must be the chec
 
 ## 7. Context Menu Catalogue
 
-Items marked with a condition appear only when it holds. Separator groups are indicated by blank rows in GitKraken's menus; the grouping below is a recommendation `[inferred]`.
+Items marked with a condition appear only when it holds. Separator groups are indicated by blank rows in the reference client's menus; the grouping below is a recommendation `[inferred]`.
 
 ### 7.1 Commit (graph row)
 
@@ -450,7 +450,7 @@ Select the `// WIP` node. The Commit Panel shows:
 | Discard all | Trash icon above Unstaged Files | | `git restore .` + `git clean` for untracked `[inferred: confirm includes untracked]` |
 | Discard selected | Right-click → "Discard selected" | | |
 
-Discard is destructive and always confirmed. Discard is undoable through Undo (Section 22) in GitKraken; the clone must snapshot discarded content to support this (for example via `git stash create` objects) `[inferred]`.
+Discard is destructive and always confirmed. Discard is undoable through Undo (Section 22) in the reference client; the clone must snapshot discarded content to support this (for example via `git stash create` objects) `[inferred]`.
 
 ### 8.4 Line and hunk staging
 
@@ -476,7 +476,7 @@ Discard is destructive and always confirmed. Discard is undoable through Undo (S
   - the selected file only
   - all files with that extension
   - all files in that directory
-- Rules are appended to the repository root `.gitignore`. Nested `.gitignore` files are not written or parsed by GitKraken for this action.
+- Rules are appended to the repository root `.gitignore`. Nested `.gitignore` files are not written or parsed by the reference client for this action.
 - Already-tracked file: a dialog offers two buttons:
   - "Ignore": adds the rule only; the file stays tracked. Result: `.gitignore` unstaged, file still shown as modified.
   - "Ignore and Stop Tracking": adds the rule and runs `git rm --cached <file>`. Result: `.gitignore` unstaged, file staged as deleted.
@@ -646,7 +646,7 @@ Preferences → External Tools: Beyond Compare, FileMerge, Kaleidoscope, KDiff, 
 
 ## 12. File Editing
 
-Section mapped from `/editing-files/`. The extension opens files in VS Code editors; the GitKraken in-app editor behaviour below applies if an in-webview editor is built.
+Section mapped from `/editing-files/`. The extension opens files in VS Code editors; the reference client's in-app editor behaviour below applies if an in-webview editor is built.
 
 - Entry: right-click file → "Edit file"; Command Palette → "Edit File" → filename; "Edit this file" in the diff view.
 - Indicators (upper left): "editable" tag; blue dot for unsaved changes.
@@ -671,7 +671,7 @@ Section mapped from `/branching-and-merging/`, `/detached-head-state/`.
 ### 13.2 Checkout
 
 - Double-click a branch label in the graph or Left Panel, or right-click → "Checkout".
-- Uncommitted changes that conflict with the target: GitKraken suggests stash, switch, pop. The clone offers "Stash and checkout" `[inferred]`.
+- Uncommitted changes that conflict with the target: the reference client suggests stash, switch, pop. The clone offers "Stash and checkout" `[inferred]`.
 - Checkout is undoable.
 
 ### 13.3 Rename
@@ -751,7 +751,7 @@ Preferences → Commit → Merge Behavior → "Squash". Description: "When enabl
 
 ### 14.5 External merge tools
 
-Preferences → General / External Tools: Beyond Compare, FileMerge, Kaleidoscope, KDiff, Araxis, P4Merge. Not supported by GitKraken: Meld, SemanticMerge, TortoiseMerge, WinMerge. In the extension, VS Code's 3-way merge editor is the default external target `[inferred]`.
+Preferences → General / External Tools: Beyond Compare, FileMerge, Kaleidoscope, KDiff, Araxis, P4Merge. Not supported by the reference client: Meld, SemanticMerge, TortoiseMerge, WinMerge. In the extension, VS Code's 3-way merge editor is the default external target `[inferred]`.
 
 ---
 
@@ -811,7 +811,7 @@ Section mapped from `/interactive-rebase/`, `/cherrypick/`.
 +---------------------------------------------------------------+
 ```
 
-- Commits listed newest at top `[inferred, matches GitKraken]`, base branch shown below the list.
+- Commits listed newest at top `[inferred, matches reference client]`, base branch shown below the list.
 - Each row: drag handle, action dropdown, SHA, summary, author.
 - Actions and keys (apply to the selected row):
 
@@ -1007,7 +1007,7 @@ Section mapped from `/undo-and-redo/`.
 
 - Create: right-click commit → "Create patch from commit"; right-click file → "Create patch from file changes"; Command Palette → "Create Patch"; multi-selected commits or files → right-click. Output: `.patch` save dialog (`git format-patch` / `git diff`).
 - Apply: Command Palette → "Apply Patch" → choose `.patch` file (`git apply`).
-- No binary patches. No multi-select patch when a combined diff is unavailable. GitKraken labels patches as preliminary.
+- No binary patches. No multi-select patch when a combined diff is unavailable. The reference client labels patches as preliminary.
 
 ---
 
@@ -1072,7 +1072,7 @@ Section mapped from `/conflict-prevention/`.
 
 ## 28. Preferences Catalogue
 
-Grouped by GitKraken section. In the extension, these map to `contributes.configuration` settings (`mygit.*`) or per-repository `workspaceState` `[inferred]`.
+Grouped by reference-client section. In the extension, these map to `contributes.configuration` settings (`mygit.*`) or per-repository `workspaceState` `[inferred]`.
 
 ### 28.1 General
 
@@ -1214,35 +1214,3 @@ All single-letter keys apply only when focus is not in a text input.
 | Hook failure | toast | hook output; link to Activity Log |
 | Git command failure | toast | verbatim git stderr `[inferred]` |
 | Undo / redo completed | toast | names the action `[inferred]` |
-
----
-
-## Appendix A. Sources
-
-| URL | Sections |
-| --- | --- |
-| https://help.gitkraken.com/gitkraken-desktop/adding-and-removing/ | 8.5, 8.6 |
-| https://help.gitkraken.com/gitkraken-desktop/cherrypick/ | 16, 17.1 |
-| https://help.gitkraken.com/gitkraken-desktop/commits/ | 9, 17.2, 17.3, 17.5 |
-| https://help.gitkraken.com/gitkraken-desktop/detached-head-state/ | 13.7 |
-| https://help.gitkraken.com/gitkraken-desktop/diff/ | 11, 23 |
-| https://help.gitkraken.com/gitkraken-desktop/editing-files/ | 12 |
-| https://help.gitkraken.com/gitkraken-desktop/staging/ | 8 |
-| https://help.gitkraken.com/gitkraken-desktop/squash/ | 17.4, 20.6 |
-| https://help.gitkraken.com/gitkraken-desktop/stashing/ | 18 |
-| https://help.gitkraken.com/gitkraken-desktop/search/ | 6.4, 21 |
-| https://help.gitkraken.com/gitkraken-desktop/undo-and-redo/ | 22 |
-| https://help.gitkraken.com/gitkraken-desktop/open-clone-init/ | 26 |
-| https://help.gitkraken.com/gitkraken-desktop/activity-logs/ | 25 |
-| https://help.gitkraken.com/gitkraken-desktop/branching-and-merging/ | 6.5, 13, 14, 15 |
-| https://help.gitkraken.com/gitkraken-desktop/conflict-prevention/ | 27 |
-| https://help.gitkraken.com/gitkraken-desktop/githooks/ | 24 |
-| https://help.gitkraken.com/gitkraken-desktop/hiding-and-soloing/ | 5.4 |
-| https://help.gitkraken.com/gitkraken-desktop/interactive-rebase/ | 16 |
-| https://help.gitkraken.com/gitkraken-desktop/pushing-and-pulling/ | 20 |
-| https://help.gitkraken.com/gitkraken-desktop/tags/ | 19 |
-| https://help.gitkraken.com/gitkraken-desktop/interface/ (supplementary) | 3, 4, 5, 6 |
-| https://help.gitkraken.com/gitkraken-desktop/keyboard-shortcuts/ (supplementary) | 29 |
-| https://help.gitkraken.com/gitkraken-desktop/preferences/ (supplementary) | 28 |
-
-Excluded pages: favorites, fork, pull-requests, pull-requests-filter-syntax, linking, submodules, team-view, terminal, windows-subsystem-for-linux, worktrees.

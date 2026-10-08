@@ -1,7 +1,7 @@
 {
   "name": "vscode-git-client",
   "displayName": "mygit",
-  "description": "A GitKraken-style Git client for the workspace repository: commit graph, branches, staging, diffs, merge tool and interactive rebase.",
+  "description": "A Git client for the workspace repository: commit graph, branches, staging, diffs, merge tool and interactive rebase.",
   "version": "0.0.5",
   "publisher": "seaargsp",
   "license": "MIT",
