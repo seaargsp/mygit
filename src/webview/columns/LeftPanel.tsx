@@ -1,5 +1,5 @@
 import type { ComponentChildren, Ref } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { BranchRef, StashRef, TagRef } from '../../git/refs';
 import type { MenuItem } from '../components/ContextMenu';
 import type { Ctx, DragRef } from '../lib/ui';
@@ -9,7 +9,7 @@ import {
   checkoutLocal, checkoutRemote, dropMenu, localBranchMenu, remoteBranchMenu, remoteDialog, remoteMenu, send, stashIds, stashMenu, tagMenu,
   type DropTarget,
 } from '../lib/actions';
-import { usePersisted } from '../lib/persist';
+import { loadPersisted, savePersisted, usePersisted } from '../lib/persist';
 import { Spinner } from '../components/Spinner';
 import { primary } from '../lib/events';
 
@@ -60,7 +60,14 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
   const { repoPrefs, branches, tags, stashes, remotes } = state;
   const [filter, setFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
-  const [collapsed, setCollapsed] = usePersisted<Record<string, boolean>>('leftCollapsed', {});
+  const [collapsedList, setCollapsedList] = useState<string[]>(repoPrefs.collapsed);
+  useEffect(() => setCollapsedList(repoPrefs.collapsed), [repoPrefs.collapsed]);
+  const collapsed = useMemo(() => new Set(collapsedList), [collapsedList]);
+  const toggleKey = (key: string) => {
+    const next = collapsed.has(key) ? collapsedList.filter(entry => entry !== key) : [...collapsedList, key];
+    setCollapsedList(next);
+    send(ctx, 'prefs:collapsed', { collapsed: next });
+  };
   const [maximised, setMaximised] = useState<SectionId | null>(null);
   const [heights, setHeights] = usePersisted<Partial<Record<SectionId, number>>>('sectionHeights', {});
   const [multi, setMulti] = useState<string[]>([]);
@@ -82,11 +89,23 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
   const visibleTags = tags.filter(tag => matches(tag.name) && (!tagFilter.trim() || tag.name.toLowerCase().includes(tagFilter.trim().toLowerCase())));
   const visibleStashes = stashes.filter(stash => matches(stash.message) || matches(stash.ref));
 
-  const isOpen = (id: string) => (maximised ? maximised === id : !collapsed[id]);
+  const isOpen = (id: string) => (maximised ? maximised === id : !collapsed.has(id));
   const toggle = (id: string) => {
     if (maximised) setMaximised(null);
-    setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
+    toggleKey(id);
   };
+
+  // State from before per-repository persistence lived in webview state.
+  useEffect(() => {
+    const legacy = loadPersisted<Record<string, boolean> | null>('leftCollapsed', null);
+    if (!legacy) return;
+    savePersisted('leftCollapsed', undefined);
+    const keys = Object.entries(legacy).filter(([, value]) => value).map(([key]) => key);
+    if (keys.length > 0 && repoPrefs.collapsed.length === 0) {
+      setCollapsedList(keys);
+      send(ctx, 'prefs:collapsed', { collapsed: keys });
+    }
+  }, []);
 
   function reveal(sha: string): void {
     ctx.ui.revealCommit(sha);
@@ -265,10 +284,10 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
     return nodes.map(node => {
       if (node.item !== undefined) return row(node.item, node.name, depth);
       const folderKey = `${prefix}/${node.path}`;
-      const open = !collapsed[folderKey] || Boolean(query);
+      const open = !collapsed.has(folderKey) || Boolean(query);
       return (
         <li key={folderKey} class="ref-folder">
-          <button class="ref-row ref-row--folder" style={{ '--depth': depth } as Record<string, number>} aria-expanded={open} onClick={() => setCollapsed(prev => ({ ...prev, [folderKey]: !prev[folderKey] }))}>
+          <button class="ref-row ref-row--folder" style={{ '--depth': depth } as Record<string, number>} aria-expanded={open} onClick={() => toggleKey(folderKey)}>
             <span class="chevron" data-open={open}><Icon name="chevron" size={11} /></span>
             <Icon name="folder" size={12} />
             <span class="ref-row__name">{node.name}</span>
@@ -335,7 +354,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
             const group = branches.remote.find(entry => entry.remoteName === remote.name);
             const remoteBranches = (group?.branches ?? []).filter(branch => matches(`${remote.name}/${branch.name}`));
             const key = `remote-node:${remote.name}`;
-            const open = !collapsed[key] || Boolean(query);
+            const open = !collapsed.has(key) || Boolean(query);
             const id = `remote:${remote.name}`;
             return (
               <li key={key} class="ref-folder">
@@ -343,7 +362,7 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
                   class={`ref-row ref-row--remote${repoPrefs.hidden.includes(id) ? ' ref-row--hidden' : ''}`}
                   style={{ '--depth': 1 } as Record<string, number>}
                   title={remote.fetchUrl}
-                  onClick={() => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))}
+                  onClick={() => toggleKey(key)}
                   onContextMenu={event => ctx.ui.openMenu(event, remoteMenu(ctx, remote.name))}
                 >
                   <span class="chevron" data-open={open}><Icon name="chevron" size={11} /></span>

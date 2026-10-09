@@ -800,6 +800,9 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
     case 'prefs:sections':
       store.setRepoPrefs({ sectionsHidden: message.payload.hidden });
       return;
+    case 'prefs:collapsed':
+      store.setRepoPrefs({ collapsed: message.payload.collapsed });
+      return;
 
     // ------------------------------------------------------------ tags
     case 'tag:create': {

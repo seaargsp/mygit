@@ -85,6 +85,8 @@ export type RepoPrefs = {
   /** Left Panel sections switched off. */
   sectionsHidden: string[];
   conflictIgnored: string[];
+  /** Left Panel nodes collapsed: section ids, folder keys, remote node keys. */
+  collapsed: string[];
 };
 
 export const DEFAULT_REPO_PREFS: RepoPrefs = {
@@ -96,6 +98,7 @@ export const DEFAULT_REPO_PREFS: RepoPrefs = {
   columns: { order: ['refs', 'graph', 'message', 'author', 'date', 'sha'], hidden: ['author', 'date', 'sha'], widths: {} },
   sectionsHidden: [],
   conflictIgnored: [],
+  collapsed: [],
 };
 
 /** Settings the webview renders with (`mygit.*`). */
@@ -272,6 +275,7 @@ export type Ops = {
   'graph:smartVisibility': { on: boolean };
   'prefs:columns': { columns: ColumnPrefs };
   'prefs:sections': { hidden: string[] };
+  'prefs:collapsed': { collapsed: string[] };
   'tag:create': { name: string; ref: string; message?: string };
   'tag:delete': { name: string };
   'tag:deleteRemote': { name: string; remote: string };
@@ -329,7 +333,7 @@ const OP_NAMES: Record<OpName, true> = {
   'branch:delete': true, 'branch:deleteRemote': true, 'branch:setUpstream': true, 'branch:fastForward': true, 'branch:pull': true,
   'branch:merge': true, 'branch:rebase': true, 'branch:rebaseRange': true, 'branch:pushTo': true,
   'branch:pin': true, 'refs:hide': true, 'refs:solo': true, 'graph:smartVisibility': true,
-  'prefs:columns': true, 'prefs:sections': true, 'tag:create': true, 'tag:delete': true,
+  'prefs:columns': true, 'prefs:sections': true, 'prefs:collapsed': true, 'tag:create': true, 'tag:delete': true,
   'tag:deleteRemote': true, 'tag:push': true, 'tag:annotate': true, 'tag:fastForward': true,
   'remote:fetch': true, 'remote:pull': true, 'remote:setDefaultPull': true, 'remote:push': true,
   'remote:add': true, 'remote:edit': true, 'remote:remove': true, 'stash:save': true,
