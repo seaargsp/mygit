@@ -46,3 +46,30 @@ describe('listBranches', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('runGitFull process handling', () => {
+  afterEach(() => setGitBinaryPath('git'));
+
+  it('passes arguments without a shell', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mygit-argv-'));
+    setGitBinaryPath('/bin/echo');
+    const result = await runGitFull(dir, ['$(touch pwned)', ';', '|', '`id`']);
+    expect(result.stdout.trim()).toBe('$(touch pwned) ; | `id`');
+    expect(fs.existsSync(path.join(dir, 'pwned'))).toBe(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('stops a process whose output exceeds the cap', async () => {
+    setGitBinaryPath('/bin/sh');
+    await expect(runGitFull(os.tmpdir(), ['-c', 'yes'], { maxOutputBytes: 64 * 1024 })).rejects.toThrow(/output exceeded/);
+  });
+
+  it.skipIf(process.platform === 'win32')('escalates to SIGKILL when SIGTERM is ignored', async () => {
+    const pidFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mygit-kill-')), 'pid');
+    setGitBinaryPath('/bin/sh');
+    await expect(runGitFull(os.tmpdir(), ['-c', 'echo $$ > "$0"; trap "" TERM; sleep 30', pidFile], { timeoutMs: 200 })).rejects.toThrow(/timed out/);
+    const pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+    await new Promise(resolve => setTimeout(resolve, 3500));
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 10_000);
+});

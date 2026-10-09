@@ -18,6 +18,8 @@ export type GitRunOptions = {
   timeoutMs?: number;
   /** Kills the process when aborted (a superseded search). */
   signal?: AbortSignal;
+  /** Upper bound of stdout plus stderr kept in memory; the process is stopped beyond it. */
+  maxOutputBytes?: number;
 };
 
 export type GitResult = { stdout: string; stderr: string; code: number };
@@ -26,6 +28,10 @@ export type GitLogEntry = { args: string[]; durationMs: number; ok: boolean; std
 
 let gitBinaryPath = 'git';
 let defaultTimeoutMs = 300_000;
+
+export const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+/** Time a stopped process gets to exit after SIGTERM before SIGKILL. */
+export const KILL_GRACE_MS = 3000;
 let logger: ((entry: GitLogEntry) => void) | undefined;
 
 export function setGitBinaryPath(path: string): void {
@@ -72,13 +78,19 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
 
     // A git waiting on a credential helper, ssh or a hook otherwise never settles. The promise
     // settles at once: `close` waits for every holder of the output pipes, children included.
-    const stop = (detail: string) => {
+    const signalGroup = (signal: NodeJS.Signals) => {
       try {
-        if (posix && child.pid !== undefined) process.kill(-child.pid, 'SIGTERM');
-        else child.kill();
+        if (posix && child.pid !== undefined) process.kill(-child.pid, signal);
+        else child.kill(signal);
       } catch {
         // Already exited.
       }
+    };
+    const stop = (detail: string) => {
+      signalGroup('SIGTERM');
+      const kill = setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
+      kill.unref();
+      child.once('exit', () => clearTimeout(kill));
       child.stdout.destroy();
       child.stderr.destroy();
       fail(new GitError(`git ${args.join(' ')} failed: ${detail}`, detail, args, null), detail);
@@ -91,8 +103,18 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
     if (opts.signal?.aborted) onAbort();
     else opts.signal?.addEventListener('abort', onAbort, { once: true });
 
-    child.stdout.on('data', chunk => out.push(chunk));
-    child.stderr.on('data', chunk => err.push(chunk));
+    const maxOutput = opts.maxOutputBytes ?? MAX_OUTPUT_BYTES;
+    let outputBytes = 0;
+    const collect = (target: Buffer[]) => (chunk: Buffer) => {
+      outputBytes += chunk.length;
+      if (outputBytes > maxOutput) {
+        stop(`output exceeded ${Math.round(maxOutput / (1024 * 1024)) || 1} MiB`);
+        return;
+      }
+      target.push(chunk);
+    };
+    child.stdout.on('data', collect(out));
+    child.stderr.on('data', collect(err));
     child.on('error', error => fail(new GitError(`git ${args.join(' ')} failed: ${error.message}`, error.message, args, null), error.message));
     child.on('close', code => {
       if (settled) return;
