@@ -34,7 +34,7 @@ Open the mygit icon in the Activity Bar, or run **mygit: Show** from the Command
 
 ```
 +-------------------------------------------------------------------------------+
-| Toolbar: Undo Redo | Pull Push | Branch | Stash Pop | LFS Sparse |   Search   |
+| Toolbar: Undo Redo | Pull Push | Branch | Stash Pop | History | LFS |  Search  |
 +--------------+----------------------------------------+-----------------------+
 | Left panel   | Commit graph                           | Commit panel          |
 | Local        | Branch/Tag | Graph | Message | ...     | WIP: staging, commit  |
@@ -46,7 +46,7 @@ Open the mygit icon in the Activity Bar, or run **mygit: Show** from the Command
 +-------------------------------------------------------------------------------+
 ```
 
-All three panes resize by dragging. The centre pane holds the graph and switches to a diff, file history, blame, merge tool or interactive rebase view when one is opened. `Esc` returns to the graph.
+All three panes resize by dragging. The centre pane holds the graph and switches to a diff, file history, blame, merge tool, interactive rebase or History view when one is opened. `Esc` returns to the graph.
 
 The client refreshes on working tree changes and on changes under `.git`, so commits, checkouts and rebases run from a terminal show up without a reload.
 
@@ -140,7 +140,7 @@ Summary and description, author, committer when different, co-authors, full SHA,
 
 ### Merge finder
 
-"Find merges of A into…" on a local or remote branch lists the merge commits on the target's first-parent line that brought in commits of A, newest first. Each result shows the date, SHA, author, subject, the number of A's commits it brought in, and whether the merge was direct or came through another branch (`via release/2.1`). A branch whose tip lies on the target's first-parent line is reported as a fast-forward. The dialog also states how many commits of A are not yet in the target.
+"Find merges of A into…" on a local or remote branch lists the merge commits on the target's first-parent line that brought in commits of A, newest first. Each result shows the date, SHA, author, subject, the number of A's commits it brought in, and whether the merge was direct or came through another branch (`via release/2.1`). A branch with commits added after its last merge still lists its earlier merges. A branch whose tip lies on the target's first-parent line is reported as a fast-forward. The dialog also states how many commits of A are not yet in the target.
 
 "Mark in graph" highlights the results and opens a strip that steps through them with Enter and Shift+Enter, loading older history when needed. Squash merges and rebases leave no ancestry link, so they produce no result; the dialog then offers to search the target's history for the branch name.
 
@@ -187,8 +187,8 @@ Summary and description, author, committer when different, co-authors, full SHA,
 
 The toolbar's History button, **mygit: Show History** and "Show history of" on branches, remote branches and tags open a filtered commit list in the centre pane.
 
-- Filters: refs (all refs when empty), author, message, a date range and a path. Author and message match case-insensitively as plain text.
-- Compare mode lists the commits only in A and only in B (`A...B`); "Changed files" shows their file list in the commit panel.
+- Filters: refs (all refs when empty), author, message, a date range and a path (a directory such as `src/` or a file). Author and message match case-insensitively as plain text.
+- Compare mode lists the commits only in A and only in B (`A...B`). "Changed files" shows, in the commit panel, the files B changed since it split from A (merge base to B).
 - Rows load 200 at a time as the list scrolls; the footer shows the match count.
 - Clicking a row shows its details; double-click or Enter shows it in the graph, loading older history when needed. The context menu offers the usual commit actions.
 
@@ -208,7 +208,7 @@ Create a `.patch` file from one or more commits or from selected file changes, a
 
 - Credential and SSH passphrase prompts open as VS Code input boxes, masked except for user names. Git reaches them through an askpass helper over a local socket that only accepts the current session's random token. Automatic fetches never prompt.
 - Credentials embedded in remote URLs are hidden in the reference panel, dialogs, notifications and the Activity Log; editing a remote without changing its URL keeps the stored credentials.
-- Every message from the webview is checked against a schema. Branch, tag and remote names that look like options, the `ext::` and `fd::` transports, and paths outside the repository are rejected before git runs.
+- Every message from the webview is checked against a schema. Branch, tag and remote names that look like options, the `ext::` and `fd::` transports, and paths that leave the repository or reach `.git` (with `/` or `\` separators) are rejected before git runs. A rejected value shows a notification naming the field, and the remote and Create file dialogs check the same rules while typing.
 - Git output is capped at 64 MiB per command. A stopped command that ignores SIGTERM gets SIGKILL after 3 seconds.
 - `.gitignore` and commit template writes refuse symbolic links. The webview runs under a strict Content Security Policy. Untrusted (Restricted Mode) and virtual workspaces are not supported.
 
@@ -304,7 +304,7 @@ npm run watch    # rebuild on change
 npm test         # vitest
 ```
 
-The extension host code is in `src/` (`src/git` wraps Git commands, `src/panel` holds state and operations). The webview is a Preact app in `src/webview`. esbuild bundles both.
+The extension host code is in `src/` (`src/git` wraps Git commands, `src/panel` holds state, operations and message validation, `src/ipc` is the askpass server and client). The webview is a Preact app in `src/webview`. esbuild bundles the extension, the webview and the askpass client (`dist/askpass-main.js`, run by `media/askpass.sh`).
 
 To run from source, press F5 in VS Code to start an Extension Development Host, or symlink the working copy into `~/.vscode/extensions`. In a source install, a rebuilt webview bundle reloads the webview and a rebuilt extension bundle restarts the extension host, with the mygit tab restored.
 
