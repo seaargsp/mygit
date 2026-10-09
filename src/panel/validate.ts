@@ -62,6 +62,8 @@ export const OP_SCHEMAS: Record<OpName, Schema> = {
   'view:cherryPickMany': obj({ shas: arr(sha, 1000) }),
   'view:log': obj({ query: logQuery }),
   'view:logMore': NONE,
+  'merge:find': obj({ source: rev, target: rev }),
+  'merge:cancel': NONE,
   'files:listAll': obj({ rev: nullable(revOrWorking) }),
   'stage:paths': obj({ paths }),
   'stage:unstagePaths': obj({ paths }),

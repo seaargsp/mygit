@@ -29,6 +29,7 @@ import { getRepoState, headSha, isHeadPushed } from '../git/repoState';
 import { getStashFiles } from '../git/stash';
 import { redactRemote, redactText } from '../git/redact';
 import { LOG_PAGE, countLog, queryLog } from '../git/log';
+import { findMerges } from '../git/mergeFinder';
 
 /** Tree of an empty repository: the left side of a root commit's diff. */
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -107,6 +108,7 @@ export class Store {
   private pendingId = 0;
   private searchAbort: AbortController | null = null;
   private logAbort: AbortController | null = null;
+  private mergeAbort: AbortController | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -142,6 +144,7 @@ export class Store {
       pending: [],
       loading: { refs: true, status: true, graph: true },
       avatars: {},
+      mergeFinder: null,
     };
     deps.log.onChange(() => this.setState({ log: { app: [...deps.log.app], repo: [...deps.log.repo] } }));
   }
@@ -724,6 +727,27 @@ export class Store {
     } catch {
       this.patchView(token, { loading: false });
     }
+  }
+
+  async findMerges(source: string, target: string): Promise<void> {
+    this.mergeAbort?.abort();
+    const controller = new AbortController();
+    this.mergeAbort = controller;
+    this.setState({ mergeFinder: { source, target, running: true, result: null, error: null } });
+    try {
+      const result = await findMerges(this.repoPath, source, target, controller.signal);
+      if (!controller.signal.aborted) this.setState({ mergeFinder: { source, target, running: false, result, error: null } });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const text = error instanceof GitError ? error.stderr || error.message : error instanceof Error ? error.message : String(error);
+      this.setState({ mergeFinder: { source, target, running: false, result: null, error: redactText(text) } });
+    }
+  }
+
+  cancelMergeFinder(): void {
+    this.mergeAbort?.abort();
+    this.mergeAbort = null;
+    this.setState({ mergeFinder: null });
   }
 
   async openBlame(filePath: string, rev: string): Promise<void> {

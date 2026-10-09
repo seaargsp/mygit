@@ -273,6 +273,11 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       return store.openLog(message.payload.query);
     case 'view:logMore':
       return store.logMore();
+    case 'merge:find':
+      return store.findMerges(message.payload.source, message.payload.target);
+    case 'merge:cancel':
+      store.cancelMergeFinder();
+      return;
     case 'view:diffContext':
       return store.setDiffContext(message.payload.context);
     case 'view:fileView':

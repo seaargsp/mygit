@@ -59,6 +59,7 @@ const EMPTY_STATE: ClientState = {
   pending: [],
   loading: { refs: true, status: true, graph: true },
   avatars: {},
+  mergeFinder: null,
 };
 
 /** Graph rows kept in the snapshot: enough to fill the first screens. */

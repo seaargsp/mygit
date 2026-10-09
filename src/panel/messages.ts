@@ -8,8 +8,11 @@ import type { RepoState } from '../git/repoState';
 import type { PullMode } from '../git/remote';
 import type { TargetConflicts } from '../git/conflicts';
 import type { LogQuery, LogRow } from '../git/log';
+import type { MergeFinderResult } from '../git/mergeFinder';
 
-export type { DiffContext, PullMode, ResetMode, TodoEntry, IgnoreMode, LogQuery, LogRow };
+export type { DiffContext, PullMode, ResetMode, TodoEntry, IgnoreMode, LogQuery, LogRow, MergeFinderResult };
+
+export type MergeFinderState = { source: string; target: string; running: boolean; result: MergeFinderResult | null; error: string | null };
 
 export const EMPTY_LOG_QUERY: LogQuery = { refs: [], author: '', message: '', since: '', until: '', path: '', compare: null };
 
@@ -194,6 +197,7 @@ export type ClientState = {
   /** Operations in flight, for spinners on the buttons and references they act on. */
   pending: PendingOp[];
   avatars: Record<string, string>;
+  mergeFinder: MergeFinderState | null;
 };
 
 /**
@@ -269,6 +273,8 @@ export type Ops = {
   'view:cherryPickMany': { shas: string[] };
   'view:log': { query: LogQuery };
   'view:logMore': Record<string, never>;
+  'merge:find': { source: string; target: string };
+  'merge:cancel': Record<string, never>;
   'files:listAll': { rev: string | null };
   'stage:paths': { paths: string[] };
   'stage:unstagePaths': { paths: string[] };
