@@ -86,13 +86,13 @@ export async function interactiveRebase(
       lines.push(`${entry.action === 'squash' ? 'squash' : 'pick'} ${entry.sha}`);
       if (entry.action === 'reword' && entry.message !== undefined) {
         const file = path.join(dir, `message-${messageIndex++}`);
-        await fs.writeFile(file, entry.message);
+        await fs.writeFile(file, entry.message, { mode: 0o600 });
         lines.push(`exec git commit --amend --only --cleanup=strip --no-verify -q -F ${shellQuote(file)}`);
       }
     }
     if (lines.length === 0) lines.push('noop');
     const todo = path.join(dir, 'todo');
-    await fs.writeFile(todo, `${lines.join('\n')}\n`);
+    await fs.writeFile(todo, `${lines.join('\n')}\n`, { mode: 0o600 });
 
     const args = ['rebase', '-i', '--no-autosquash'];
     if (opts.root) args.push('--root');

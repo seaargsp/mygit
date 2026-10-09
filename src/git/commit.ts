@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { runGit } from './gitService';
+import { isInside, writeRegularFile } from './safeWrite';
 import { parseNameStatus } from './diff';
 import type { FileChange } from './status';
 
@@ -62,7 +63,7 @@ export type CommitOptions = { amend: boolean; skipHooks: boolean; sign: boolean 
 async function withMessageFile<T>(message: string, run: (file: string) => Promise<T>): Promise<T> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mygit-'));
   const file = path.join(dir, 'COMMIT_MSG');
-  await fs.writeFile(file, message);
+  await fs.writeFile(file, message, { mode: 0o600 });
   try {
     return await run(file);
   } finally {
@@ -139,11 +140,14 @@ export async function saveCommitTemplate(repoPath: string, gitDir: string, summa
   const current = await getCommitTemplate(repoPath);
   const text = description ? `${summary}\n\n${description}\n` : `${summary}\n`;
   if (current.scope === 'local' && current.path) {
-    await fs.writeFile(current.path, text);
+    if (!isInside(current.path, repoPath) && !isInside(current.path, gitDir)) {
+      throw new Error(`The configured commit.template (${current.path}) is outside the repository; edit it there or remove the setting.`);
+    }
+    await writeRegularFile(current.path, text);
     return;
   }
   const file = path.join(gitDir, 'gkcommittemplate.txt');
-  await fs.writeFile(file, text);
+  await writeRegularFile(file, text);
   await runGit(repoPath, ['config', '--local', 'commit.template', file]);
 }
 

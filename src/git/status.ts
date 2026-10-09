@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { runGit } from './gitService';
+import { writeRegularFile } from './safeWrite';
 
 export type FileStatus = 'A' | 'M' | 'D' | 'R' | 'U';
 
@@ -183,7 +184,7 @@ export async function ignoreFile(repoPath: string, filePath: string, mode: Ignor
   const rule = ignoreRule(filePath, mode);
   if (!existing.split(/\r?\n/).includes(rule)) {
     const separator = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-    await fs.writeFile(file, `${existing}${separator}${rule}\n`);
+    await writeRegularFile(file, `${existing}${separator}${rule}\n`);
   }
   if (stopTracking) {
     const target = mode === 'file' ? filePath : mode === 'directory' ? path.posix.dirname(filePath) : filePath;
