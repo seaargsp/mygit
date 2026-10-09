@@ -63,7 +63,7 @@ describe('remote:add fetch failure', () => {
     const host = { store, post: vi.fn(), checkConflicts: vi.fn(), clearLog: vi.fn() };
     vscodeMock.window.showWarningMessage.mockClear();
     await handleMessage(host, { type: 'remote:add', payload: { name: 'up', fetchUrl: 'https://user:SECRET1@127.0.0.1:9/x.git?token=SECRET2', pushUrl: '' } });
-    const shown = vscodeMock.window.showWarningMessage.mock.calls.map(call => String(call[0])).join('\n');
+    const shown = vscodeMock.window.showWarningMessage.mock.calls.map(call => String((call as unknown[])[0])).join('\n');
     expect(shown).toContain('fetching it failed');
     expect(shown).not.toMatch(/SECRET/);
     fs.rmSync(dir, { recursive: true, force: true });
