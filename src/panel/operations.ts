@@ -273,6 +273,8 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       return store.openLog(message.payload.query);
     case 'view:logMore':
       return store.logMore();
+    case 'view:compareRefs':
+      return store.compareRefs(message.payload.left, message.payload.right);
     case 'merge:find':
       return store.findMerges(message.payload.source, message.payload.target);
     case 'merge:cancel':

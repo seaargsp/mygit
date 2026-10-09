@@ -273,6 +273,7 @@ export type Ops = {
   'view:cherryPickMany': { shas: string[] };
   'view:log': { query: LogQuery };
   'view:logMore': Record<string, never>;
+  'view:compareRefs': { left: string; right: string };
   'merge:find': { source: string; target: string };
   'merge:cancel': Record<string, never>;
   'files:listAll': { rev: string | null };

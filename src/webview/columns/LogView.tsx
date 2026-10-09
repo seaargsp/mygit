@@ -194,8 +194,8 @@ export function LogView({ ctx, view }: { ctx: Ctx; view: View }) {
 
       <footer class="log-view__foot">
         <span>{count}</span>
-        {view.query.compare && view.rows.length > 0 && (
-          <button class="link-btn" onClick={() => send(ctx, 'graph:select', { shas: [view.rows[view.rows.length - 1].sha, view.rows[0].sha] })}>Changed files</button>
+        {view.query.compare && (
+          <button class="link-btn" onClick={() => send(ctx, 'view:compareRefs', { left: view.query.compare!.left, right: view.query.compare!.right })}>Changed files</button>
         )}
       </footer>
     </div>

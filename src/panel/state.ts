@@ -30,6 +30,7 @@ import { getStashFiles } from '../git/stash';
 import { redactRemote, redactText } from '../git/redact';
 import { LOG_PAGE, countLog, queryLog } from '../git/log';
 import { findMerges } from '../git/mergeFinder';
+import { mergeBase } from '../git/history';
 
 /** Tree of an empty repository: the left side of a root commit's diff. */
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -109,6 +110,8 @@ export class Store {
   private searchAbort: AbortController | null = null;
   private logAbort: AbortController | null = null;
   private mergeAbort: AbortController | null = null;
+  /** Selection whose view is a ref comparison (History compare), not derived from graph order. */
+  private comparedRange: { selection: string[]; view: SelectionView } | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -539,8 +542,11 @@ export class Store {
   }
 
   private sameSelection(next: string[]): boolean {
-    const current = this.state.selection;
-    return current.length === next.length && current.every((sha, index) => sha === next[index]);
+    return this.sameAs(this.state.selection, next);
+  }
+
+  private sameAs(a: string[], b: string[]): boolean {
+    return a.length === b.length && a.every((sha, index) => sha === b[index]);
   }
 
   private async refreshSelection(): Promise<void> {
@@ -549,7 +555,29 @@ export class Store {
     if (token === this.selectionToken) this.setState({ selectionView: view });
   }
 
+  /** Files changed on `right` since it forked from `left` (`left...right`), shown in the Commit Panel. */
+  async compareRefs(left: string, right: string): Promise<void> {
+    const to = await revParse(this.repoPath, right);
+    const from = to ? await mergeBase(this.repoPath, left, to) : null;
+    if (!to || !from) {
+      this.deps.reportError(`${left} and ${right} have no common ancestor to compare from.`);
+      return;
+    }
+    const view: SelectionView = {
+      kind: 'range', mode: 'compare', from, to, count: 2, oldest: from, newest: to,
+      files: await getRangeFiles(this.repoPath, from, to),
+    };
+    const selection = [from, to];
+    this.comparedRange = { selection, view };
+    ++this.selectionToken;
+    this.setState({ selection, selectionView: view });
+  }
+
   private async computeSelection(selection: string[]): Promise<SelectionView> {
+    if (this.comparedRange) {
+      if (this.sameAs(selection, this.comparedRange.selection)) return this.comparedRange.view;
+      this.comparedRange = null;
+    }
     if (selection.length === 1 && selection[0] === 'working-tree') return { kind: 'wip' };
 
     if (selection.length === 1) {
