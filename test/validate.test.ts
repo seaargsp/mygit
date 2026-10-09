@@ -14,17 +14,17 @@ describe('parseWebviewMessage', () => {
 
   it.each([
     [{ type: 'nope', payload: {} }, null],
-    [{ type: 'branch:checkout', payload: { name: '--detach' } }, 'payload.name'],
-    [{ type: 'branch:checkout', payload: {} }, 'payload.name'],
-    [{ type: 'merge:save', payload: { path: '../../etc/passwd', content: 'x' } }, 'payload.path'],
-    [{ type: 'remote:add', payload: { name: 'o', fetchUrl: 'ext::sh -c x', pushUrl: '' } }, 'payload.fetchUrl'],
-    [{ type: 'stage:paths', payload: { paths: 'a.txt' } }, 'payload.paths'],
-    [{ type: 'graph:search', payload: { query: 'x'.repeat(5000) } }, 'payload.query'],
-    [{ type: 'commit:reset', payload: { sha: 'abc1234', mode: 'nuke' } }, 'payload.mode'],
+    [{ type: 'branch:checkout', payload: { name: '--detach' } }, 'name'],
+    [{ type: 'branch:checkout', payload: {} }, 'name'],
+    [{ type: 'merge:save', payload: { path: '../../etc/passwd', content: 'x' } }, 'path'],
+    [{ type: 'remote:add', payload: { name: 'o', fetchUrl: 'ext::sh -c x', pushUrl: '' } }, 'fetchUrl'],
+    [{ type: 'stage:paths', payload: { paths: 'a.txt' } }, 'paths'],
+    [{ type: 'graph:search', payload: { query: 'x'.repeat(5000) } }, 'query'],
+    [{ type: 'commit:reset', payload: { sha: 'abc1234', mode: 'nuke' } }, 'mode'],
   ])('rejects %j', (raw, at) => {
     const onReject = vi.fn();
     expect(parseWebviewMessage(raw, onReject)).toBeNull();
-    if (at) expect(onReject).toHaveBeenCalledWith(expect.stringContaining(at));
+    if (at) expect(onReject.mock.calls[0][0]).toContain(at);
   });
 
   it('accepts a full rebase plan', () => {
@@ -35,5 +35,18 @@ describe('parseWebviewMessage', () => {
 
   it('has a schema for every op', () => {
     expect(Object.keys(OP_SCHEMAS).length).toBeGreaterThan(80);
+  });
+});
+
+describe('rejection reasons', () => {
+  it('name the field and the rejected value', () => {
+    const onReject = vi.fn();
+    parseWebviewMessage({ type: 'remote:add', payload: { name: '-origin', fetchUrl: 'https://h/r.git', pushUrl: '' } }, onReject);
+    expect(onReject).toHaveBeenCalledWith('Invalid name "-origin" (expected a remote name)', 'remote:add');
+  });
+
+  it('accept a shift-selection of several thousand graph rows', () => {
+    const shas = Array.from({ length: 5000 }, (_, index) => index.toString(16).padStart(7, '0'));
+    expect(parseWebviewMessage({ type: 'graph:select', payload: { shas } })?.type).toBe('graph:select');
   });
 });

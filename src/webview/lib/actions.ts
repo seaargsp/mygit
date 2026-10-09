@@ -4,6 +4,7 @@ import type { StashRef, TagRef } from '../../git/refs';
 import type { ClientState, DiffSource, LogQuery, OpName, Ops, ResetMode, WebviewToExtensionMessage } from '../../panel/messages';
 import { EMPTY_LOG_QUERY } from '../../panel/messages';
 import { loadPersisted } from './persist';
+import { isSafeRemoteName, isSafeRemoteUrl, normalizeRelPath } from '../../git/argGuard';
 import type { MenuItem } from '../components/ContextMenu';
 import { confirmDialog, promptDialog, type DialogRequest } from '../components/Dialog';
 import { branchNameError, dragRefLabel, type Ctx, type DragRef, type InlineRequest } from './ui';
@@ -241,9 +242,9 @@ export function remoteDialog(ctx: Ctx, existing?: { name: string; fetchUrl: stri
   ctx.ui.openDialog({
     title: existing ? `Edit remote ${existing.name}` : 'Add remote',
     fields: [
-      { kind: 'text', id: 'name', label: 'Remote name', value: existing?.name ?? (names.includes('origin') ? '' : 'origin'), required: true, validate: value => (names.includes(value) ? `${value} already exists.` : /\s/.test(value) ? 'Remote names cannot contain spaces.' : null) },
-      { kind: 'text', id: 'fetchUrl', label: 'Fetch URL', value: existing?.fetchUrl, placeholder: 'https://example.com/repo.git', required: true, mono: true },
-      { kind: 'text', id: 'pushUrl', label: 'Push URL (optional, defaults to the fetch URL)', value: existing && existing.pushUrl !== existing.fetchUrl ? existing.pushUrl : '', mono: true },
+      { kind: 'text', id: 'name', label: 'Remote name', value: existing?.name ?? (names.includes('origin') ? '' : 'origin'), required: true, validate: value => (names.includes(value) ? `${value} already exists.` : /\s/.test(value) ? 'Remote names cannot contain spaces.' : value && !isSafeRemoteName(value) ? 'Not a valid remote name.' : null) },
+      { kind: 'text', id: 'fetchUrl', label: 'Fetch URL', value: existing?.fetchUrl, placeholder: 'https://example.com/repo.git', required: true, mono: true, validate: value => (value && !isSafeRemoteUrl(value) ? 'Not a usable remote URL.' : null) },
+      { kind: 'text', id: 'pushUrl', label: 'Push URL (optional, defaults to the fetch URL)', value: existing && existing.pushUrl !== existing.fetchUrl ? existing.pushUrl : '', mono: true, validate: value => (value && !isSafeRemoteUrl(value) ? 'Not a usable remote URL.' : null) },
     ],
     actions: [{
       label: existing ? 'Save' : 'Add remote',
@@ -696,7 +697,11 @@ export function revisionFileMenu(ctx: Ctx, file: FileChange, rev: string, from: 
 export function createFileDialog(ctx: Ctx): void {
   ctx.ui.openDialog(promptDialog('Create file', 'File path (a / creates folders)', 'Create', path => send(ctx, 'file:create', { path: path.replace(/\\/g, '/').replace(/^\/+/, '') }), {
     placeholder: 'src/utils.js',
-    validate: value => (ctx.state.workingTreeStatus.unstaged.some(file => file.path === value) ? `${value} already exists.` : null),
+    validate: value => {
+      const path = value.replace(/\\/g, '/').replace(/^\/+/, '');
+      if (path && normalizeRelPath(path) === null) return 'The path must stay inside the repository and outside .git.';
+      return ctx.state.workingTreeStatus.unstaged.some(file => file.path === value) ? `${value} already exists.` : null;
+    },
   }));
 }
 

@@ -1,7 +1,7 @@
 import { isSafeRefName, isSafeRemoteName, isSafeRemoteUrl, isSafeRev, normalizeRelPath } from '../git/argGuard';
 
 export class SchemaError extends Error {
-  constructor(readonly at: string, readonly reason: string) {
+  constructor(readonly at: string, readonly reason: string, readonly value?: unknown) {
     super(`${at}: ${reason}`);
     this.name = 'SchemaError';
   }
@@ -9,8 +9,8 @@ export class SchemaError extends Error {
 
 export type Schema<T = unknown> = { readonly optional?: boolean; parse(value: unknown, at: string): T };
 
-function fail(at: string, reason: string): never {
-  throw new SchemaError(at, reason);
+function fail(at: string, reason: string, value?: unknown): never {
+  throw new SchemaError(at, reason, value);
 }
 
 export const str = (max = 4096): Schema<string> => ({
@@ -112,9 +112,9 @@ export function dict<K extends string, T>(keys: readonly K[], value: Schema<T>):
 export function guarded(label: string, check: (value: string) => string | null, max = 1024): Schema<string> {
   return {
     parse(value, at) {
-      if (typeof value !== 'string' || value.length > max) return fail(at, `expected ${label}`);
+      if (typeof value !== 'string' || value.length > max) return fail(at, `expected ${label}`, value);
       const kept = check(value);
-      return kept === null ? fail(at, `expected ${label}`) : kept;
+      return kept === null ? fail(at, `expected ${label}`, value) : kept;
     },
   };
 }

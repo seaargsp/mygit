@@ -45,7 +45,7 @@ const rebasePlan = obj({
 
 export const OP_SCHEMAS: Record<OpName, Schema> = {
   'ready': NONE,
-  'graph:select': obj({ shas: arr(either<string>(working, sha), 1000) }),
+  'graph:select': obj({ shas: arr(either<string>(working, sha), 100_000) }),
   'graph:loadMore': NONE,
   'graph:loadAll': NONE,
   'graph:search': obj({ query: str(1000) }),
@@ -157,8 +157,15 @@ export const OP_SCHEMAS: Record<OpName, Schema> = {
   'command': obj({ id: str(200) }),
 };
 
+/** `Invalid name "-origin" (expected a remote name)`: the field without the `payload.` prefix and the value. */
+export function rejectionReason(error: SchemaError): string {
+  const field = error.at.replace(/^payload\.?/, '') || 'payload';
+  const shown = typeof error.value === 'string' ? ` ${JSON.stringify(error.value.length > 80 ? `${error.value.slice(0, 80)}…` : error.value)}` : '';
+  return `Invalid ${field}${shown} (${error.reason})`;
+}
+
 /** Validated message, or null (the reason goes to `onReject`). */
-export function parseWebviewMessage(raw: unknown, onReject?: (reason: string) => void): WebviewToExtensionMessage | null {
+export function parseWebviewMessage(raw: unknown, onReject?: (reason: string, type?: string) => void): WebviewToExtensionMessage | null {
   if (typeof raw !== 'object' || raw === null || !('type' in raw)) return null;
   const type = (raw as { type: unknown }).type;
   if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(OP_SCHEMAS, type)) {
@@ -171,7 +178,7 @@ export function parseWebviewMessage(raw: unknown, onReject?: (reason: string) =>
     return { type, payload: parsed } as WebviewToExtensionMessage;
   } catch (error) {
     if (!(error instanceof SchemaError)) throw error;
-    onReject?.(`${type}: ${error.message}`);
+    onReject?.(rejectionReason(error), type);
     return null;
   }
 }

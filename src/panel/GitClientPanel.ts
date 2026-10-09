@@ -44,7 +44,7 @@ export type PanelHandlers = {
   onReady(): void;
   onDispose(): void;
   /** A message failed validation. */
-  onReject(reason: string): void;
+  onReject(reason: string, type?: string): void;
 };
 
 /** The client UI: one editor-area webview panel per window. */
@@ -58,7 +58,7 @@ export class ClientPanel {
     panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'mygit.svg');
     if (setHtml) panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
     panel.webview.onDidReceiveMessage(raw => {
-      const message = parseWebviewMessage(raw, reason => handlers.onReject(reason));
+      const message = parseWebviewMessage(raw, (reason, type) => handlers.onReject(reason, type));
       if (!message) return;
       if (message.type === 'ready') handlers.onReady();
       else handlers.onMessage(message);
