@@ -206,8 +206,36 @@ export type WebviewAction =
   | 'commitTemplate'
   | 'sparseCheckout';
 
+export type IconAssociations = {
+  file?: string;
+  folder?: string;
+  folderExpanded?: string;
+  fileExtensions?: Record<string, string>;
+  fileNames?: Record<string, string>;
+  folderNames?: Record<string, string>;
+  folderNamesExpanded?: Record<string, string>;
+  languageIds?: Record<string, string>;
+};
+
+export type IconThemePayload =
+  | { kind: 'none' }
+  | {
+    kind: 'theme';
+    id: string;
+    /** Generated stylesheet with the theme's @font-face rules and one class per icon definition. */
+    cssUrl: string;
+    /** Icon definition id → CSS class. */
+    classes: Record<string, string>;
+    base: IconAssociations;
+    light?: IconAssociations;
+    highContrast?: IconAssociations;
+    /** Lowercased extension (no dot) or file name → language id. */
+    languages: { extensions: Record<string, string>; filenames: Record<string, string> };
+  };
+
 export type ExtensionToWebviewMessage =
   | { type: 'state:update'; payload: Partial<ClientState> }
+  | { type: 'iconTheme'; payload: IconThemePayload }
   | { type: 'action'; payload: { action: WebviewAction } };
 
 export type Ops = {

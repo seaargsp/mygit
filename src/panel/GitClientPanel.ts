@@ -91,6 +91,19 @@ export class ClientPanel {
     return new ClientPanel(panel, extensionUri, handlers, false);
   }
 
+  private rootsKey = '';
+
+  /** Extra folders the webview may load from (icon theme assets); the document is not reloaded. */
+  setResourceRoots(roots: vscode.Uri[]): void {
+    const key = roots.map(root => root.toString()).join('|');
+    if (key === this.rootsKey) return;
+    this.rootsKey = key;
+    this.panel.webview.options = {
+      ...getWebviewOptions(this.extensionUri),
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'webview-dist'), ...roots],
+    };
+  }
+
   post(message: ExtensionToWebviewMessage): void {
     void this.panel.webview.postMessage(message);
   }

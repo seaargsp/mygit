@@ -8,6 +8,7 @@ import { registerCommands } from './commands';
 import { isSourceCheckout, watchBuildOutput } from './devReload';
 import { MIN_GIT, gitVersion, resolveRepoRoot, setGitBinaryPath, setGitTimeout, setInteractiveBridge, versionAtLeast } from './git/gitService';
 import { AskpassServer } from './ipc/askpassServer';
+import { IconThemeService } from './panel/iconTheme';
 import { getGitDir } from './git/repoState';
 
 let controller: RepositoryController | undefined;
@@ -51,6 +52,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const log = new ActivityLog();
   context.subscriptions.push(log);
+  const icons = new IconThemeService(context.globalStorageUri, text => log.application(text, 'error'));
+  context.subscriptions.push(icons);
 
   void AskpassServer.start({
     extensionPath: context.extensionPath,
@@ -92,7 +95,7 @@ export function activate(context: vscode.ExtensionContext): void {
       launcher.update({ repoName: null, branch: null, changes: 0 });
       return;
     }
-    controller = new RepositoryController(context, repoPath, await getGitDir(repoPath), log, launcher);
+    controller = new RepositoryController(context, repoPath, await getGitDir(repoPath), log, launcher, icons);
     context.subscriptions.push(controller);
   })();
 

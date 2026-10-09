@@ -11,6 +11,7 @@ import { hasCommitGraph, writeCommitGraph } from './git/repoState';
 import { matchTargets, predictConflicts, type TargetConflicts } from './git/conflicts';
 import { isAncestor } from './git/history';
 import { redactText } from './git/redact';
+import type { IconThemeService } from './panel/iconTheme';
 
 const WORKING_DEBOUNCE_MS = 300;
 const GIT_DEBOUNCE_MS = 150;
@@ -43,7 +44,8 @@ export class RepositoryController implements vscode.Disposable, Host {
     readonly repoPath: string,
     gitDir: string,
     private readonly log: ActivityLog,
-    private readonly launcher: LauncherView
+    private readonly launcher: LauncherView,
+    private readonly icons: IconThemeService
   ) {
     this.store = new Store({
       repoPath,
@@ -66,6 +68,7 @@ export class RepositoryController implements vscode.Disposable, Host {
       if (patch.head) this.scheduleConflictCheck();
     });
 
+    this.disposables.push(icons.onDidChange(() => void this.pushIconTheme()));
     this.watch(repoPath, gitDir);
     this.startAutoFetch();
     this.disposables.push(vscode.workspace.onDidChangeConfiguration(event => {
@@ -92,7 +95,10 @@ export class RepositoryController implements vscode.Disposable, Host {
   private panelHandlers() {
     return {
       onMessage: (message: WebviewToExtensionMessage) => this.dispatch(message),
-      onReady: () => this.panel?.post({ type: 'state:update', payload: this.store.loadedState() }),
+      onReady: () => {
+        this.panel?.post({ type: 'state:update', payload: this.store.loadedState() });
+        void this.pushIconTheme();
+      },
       onDispose: () => {
         this.panel = undefined;
       },
@@ -108,7 +114,19 @@ export class RepositoryController implements vscode.Disposable, Host {
     this.panel = ClientPanel.create(this.context.extensionUri, `mygit: ${this.store.getState().repoName}`, this.panelHandlers());
     void this.store.refreshIfIdle();
     void this.checkConflicts(false);
+    void this.pushIconTheme();
     return this.panel;
+  }
+
+  private async pushIconTheme(): Promise<void> {
+    const panel = this.panel;
+    if (!panel) return;
+    try {
+      panel.setResourceRoots(await this.icons.roots());
+      panel.post({ type: 'iconTheme', payload: await this.icons.payload(panel.panel.webview) });
+    } catch (error) {
+      this.log.application(`File icons unavailable: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    }
   }
 
   /** Takes over a restored panel; its `ready` may already have been sent, so the state goes out now. */
@@ -116,6 +134,7 @@ export class RepositoryController implements vscode.Disposable, Host {
     this.panel?.panel.dispose();
     this.panel = ClientPanel.attach(panel, this.context.extensionUri, this.panelHandlers());
     this.panel.post({ type: 'state:update', payload: this.store.loadedState() });
+    void this.pushIconTheme();
   }
 
   reloadPanel(): void {

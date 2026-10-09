@@ -25,7 +25,20 @@ export const workspace: {
   onDidChangeConfiguration: vi.fn(disposable),
   registerTextDocumentContentProvider: vi.fn(disposable),
 };
-export const extensions = { getExtension: vi.fn() };
+export class EventEmitter<T> {
+  private readonly listeners = new Set<(value: T) => void>();
+  event = (listener: (value: T) => void) => {
+    this.listeners.add(listener);
+    return { dispose: () => this.listeners.delete(listener) };
+  };
+  fire(value?: T): void {
+    for (const listener of this.listeners) listener(value as T);
+  }
+  dispose(): void {
+    this.listeners.clear();
+  }
+}
+export const extensions = { getExtension: vi.fn(), all: [] as unknown[], onDidChange: vi.fn(disposable) };
 type MockUri = { fsPath: string; path: string; toString: () => string; with: (_change: unknown) => MockUri };
 const uri = (fsPath: string): MockUri => {
   const self: MockUri = { fsPath, path: fsPath, toString: () => `file://${fsPath}`, with: () => self };
