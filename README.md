@@ -20,7 +20,7 @@ The extension has no accounts, no telemetry and no connection to any hosting pro
 Requirements:
 
 - VS Code 1.85 or later, with the built-in Git extension enabled. mygit uses the `git` binary that the built-in extension resolves, so `git.path` applies.
-- Git 2.38 or later for conflict prediction, which relies on `git merge-tree --write-tree`. Everything else works with older versions.
+- Git 2.24 or later. Conflict prediction needs Git 2.38, because it relies on `git merge-tree --write-tree`.
 
 Download the `.vsix` from the [releases page](https://github.com/seaargsp/mygit/releases) and install it:
 
@@ -57,6 +57,7 @@ The client refreshes on working tree changes and on changes under `.git`, so com
 - Lane-based graph with stable per-branch colours, merge lines, a `// WIP` row for uncommitted changes and stash nodes on the commits they were created from.
 - Columns for branch and tag labels, graph, message, author, date and SHA. Columns can be reordered, resized and hidden; the layout is stored per repository. The author column has a filter dropdown.
 - Hovering a branch label highlights its commits and dims the rest. Hovering or selecting a commit shows a ghost label with the nearest branch that contains it.
+- Flow tracing highlights the ancestors, the descendants or both of a commit and dims the rest. It starts from the commit menu or with `T`, which cycles off, ancestors and both on the selected commit. The trace follows the selection until Esc clears it.
 - Several refs on one commit collapse into a single label with a `+N` count.
 - Author initials or Gravatar avatars on nodes.
 - Pin to left keeps a branch's first-parent line in the leftmost lane.
@@ -78,7 +79,7 @@ The client refreshes on working tree changes and on changes under `.git`, so com
 - Tags with their own filter, and annotation messages as tooltips.
 - Stashes with their messages.
 - A filter bar across all references.
-- Sections collapse, resize, maximise on double-click and can be switched off from the header context menu.
+- Sections collapse, resize, maximise on double-click and can be switched off from the header context menu. Collapsed sections, folders and remotes are remembered per repository.
 - Hide and Solo for branches, remotes, tags and stashes. Hidden refs and the commits only they reach drop out of the graph. While anything is soloed, only soloed refs and their history are drawn. Both are display state, stored per repository.
 - Double-click a branch to check it out. Double-clicking a remote branch creates a local tracking branch or checks out the existing one.
 
@@ -137,6 +138,12 @@ Summary and description, author, committer when different, co-authors, full SHA,
 - Conflicts can also go to VS Code's 3-way merge editor or to the `merge.tool` configured in Git.
 - `.orig` backups are deleted after resolution, unless that setting is off.
 
+### Merge finder
+
+"Find merges of A into…" on a local or remote branch lists the merge commits on the target's first-parent line that brought in commits of A, newest first. Each result shows the date, SHA, author, subject, the number of A's commits it brought in, and whether the merge was direct or came through another branch (`via release/2.1`). A branch whose tip lies on the target's first-parent line is reported as a fast-forward. The dialog also states how many commits of A are not yet in the target.
+
+"Mark in graph" highlights the results and opens a strip that steps through them with Enter and Shift+Enter, loading older history when needed. Squash merges and rebases leave no ancestry link, so they produce no result; the dialog then offers to search the target's history for the branch name.
+
 ### Interactive rebase and cherry-pick
 
 - Interactive rebase from a drag and drop, from a branch context menu or from "Interactive Rebase to here" on a commit.
@@ -176,6 +183,15 @@ Summary and description, author, committer when different, co-authors, full SHA,
 - `Ctrl+Shift+H` picks a file and opens its history and blame.
 - `Ctrl+P` opens a palette with every mygit command.
 
+### History view
+
+The toolbar's History button, **mygit: Show History** and "Show history of" on branches, remote branches and tags open a filtered commit list in the centre pane.
+
+- Filters: refs (all refs when empty), author, message, a date range and a path. Author and message match case-insensitively as plain text.
+- Compare mode lists the commits only in A and only in B (`A...B`); "Changed files" shows their file list in the commit panel.
+- Rows load 200 at a time as the list scrolls; the footer shows the match count.
+- Clicking a row shows its details; double-click or Enter shows it in the graph, loading older history when needed. The context menu offers the usual commit actions.
+
 ### Undo and redo
 
 Undo and redo cover the most recent action of these kinds: checkout, commit and amend, discard, branch delete, remote removal, reset, interactive rebase, multi-commit cherry-pick, commit drop and reword. The toolbar tooltip names the action. Undo is refused when the repository changed since the action ran.
@@ -188,6 +204,18 @@ mygit checks the checked-out branch against a list of target branches (`main`, `
 
 Create a `.patch` file from one or more commits or from selected file changes, and apply a patch file to the working tree.
 
+### Credentials and security
+
+- Credential and SSH passphrase prompts open as VS Code input boxes, masked except for user names. Git reaches them through an askpass helper over a local socket that only accepts the current session's random token. Automatic fetches never prompt.
+- Credentials embedded in remote URLs are hidden in the reference panel, dialogs, notifications and the Activity Log; editing a remote without changing its URL keeps the stored credentials.
+- Every message from the webview is checked against a schema. Branch, tag and remote names that look like options, the `ext::` and `fd::` transports, and paths outside the repository are rejected before git runs.
+- Git output is capped at 64 MiB per command. A stopped command that ignores SIGTERM gets SIGKILL after 3 seconds.
+- `.gitignore` and commit template writes refuse symbolic links. The webview runs under a strict Content Security Policy. Untrusted (Restricted Mode) and virtual workspaces are not supported.
+
+### Icons
+
+UI icons are VS Code codicons. File and folder icons follow the active file icon theme (`workbench.iconTheme`), including third-party themes, and update when the theme changes.
+
 ### Repository tools
 
 - Sparse checkout in cone mode: enable, disable and reapply path rules. A toolbar button appears while sparse checkout is on.
@@ -197,7 +225,7 @@ Create a `.patch` file from one or more commits or from selected file changes, a
 
 ### Activity Log
 
-Application and repository tabs with a timestamp and duration for each entry, including hook output and Git errors. Extended logging adds every Git command, automatic fetches and conflict checks. Long-running Git commands stop after a timeout (300 seconds by default), so a hung credential prompt or hook does not block the client.
+Application and repository tabs with a timestamp and duration for each entry, including hook output and Git errors. Extended logging adds every Git command, automatic fetches and conflict checks. Long-running Git commands stop after a timeout (300 seconds by default), so a hung network call or hook does not block the client. The timeout pauses while a credential prompt is open.
 
 ## Keyboard shortcuts
 
@@ -224,6 +252,7 @@ Shortcuts are active only while the mygit tab has focus, so they override VS Cod
 | Open diff or merge tool | `Ctrl+D` |
 | Open repository folder | `Alt+O` |
 | Shortcut list | `Ctrl+/` |
+| Trace ancestors / both / off | `T` |
 | Close current view | `Esc` |
 | Interactive rebase: pick, reword, squash, drop | `P`, `R`, `S`, `D` |
 
@@ -264,6 +293,7 @@ All settings live under `mygit.*` in VS Code settings. Display state such as hid
 - No clone or init flow. Open a folder that already contains a repository.
 - No pull request, issue or other hosting-provider integration.
 - Files open in regular VS Code editors. The diff view has no syntax highlighting.
+- History view rows show no graph lanes.
 
 ## Development
 

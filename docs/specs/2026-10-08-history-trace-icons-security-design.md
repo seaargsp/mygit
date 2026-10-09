@@ -484,3 +484,20 @@ Typecheck: `tsc --noEmit` as in the existing workflow.
 6. History view (Section 7).
 7. Merge finder (Section 8), after the History view for the squash-merge link.
 8. README: features, requirements (Git 2.24), codicons attribution, settings and shortcuts.
+
+---
+
+## 12. Implementation refinements
+
+Decisions taken in the implementation plan or during implementation; they supersede the corresponding statements above.
+
+| Section | Refinement | Reason |
+| --- | --- | --- |
+| 3.2 | Guards run in the git wrappers (`src/git/*`) and in the payload schemas (`src/panel/validate.ts`). `--end-of-options` is used by every wrapped command except `checkout`, `reset` and `rev-parse`, which rely on the guard alone. | `checkout` and `reset` reject the marker (Git 2.43: "pathspec '--end-of-options' did not match", "option must come before non-option arguments"); `rev-parse` accepts it only from Git 2.43. |
+| 3.2 | Git older than 2.24: an error notification names the requirement and the launcher view shows its empty state. | The launcher has no separate requirement state. |
+| 3.4 | `ELECTRON_RUN_AS_NODE=1` is set inside `media/askpass.sh`, not in the git environment. | Hooks and other git children inherit the git environment. |
+| 3.5 | `redactText` scans `http(s)` URLs only. | `redactUrl` changes no other form. |
+| 5 | The extension writes the generated `@font-face` and class rules to `globalStorageUri/icon-theme/<hash>.css`; the webview loads it with a `<link>`. The payload carries `cssUrl` and a definition-to-class map instead of fonts and definitions. | A stylesheet served from a resource root needs no CSP exception. |
+| 5.2 | An open folder falls back from `folderNamesExpanded` to `folderNames`, then `folderExpanded`, then `folder`. | Matches the Explorer when a theme defines only closed variants. |
+| 8.4 | The chain is the target's first-parent line (`rev-list --first-parent X..B`) intersected with the descendants of X (`rev-list --ancestry-path X..B`), computed as two walks. | Combined in one walk, `--ancestry-path` follows first-parent edges only and misses merges that reached X through a second parent. |
+| 8.4 | Fast-forward results carry `count: null`. A source tip on the target's first-parent line is reported as a fast-forward even when the branch has no commits of its own. | Ancestry cannot tell the two apart. |
