@@ -1228,3 +1228,6 @@ mark.word--del { background: var(--diff-del-word); }
 .rebase-row--squash .rebase-row__message { padding-left: 14px; color: var(--text-dim); }
 .rebase-row--reword .rebase-row__action { color: var(--accent); }
 .rebase-row--base { grid-template-columns: 22px 14px minmax(0, 1fr); color: var(--text-dim); font-weight: 600; border-bottom: 0; }
+
+.file-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; font-size: 11px; line-height: 1; }
+.file-icon::before { display: block; line-height: 1; -webkit-font-smoothing: antialiased; }

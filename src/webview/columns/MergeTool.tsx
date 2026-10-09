@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { CentreView } from '../../panel/messages';
 import type { Ctx } from '../lib/ui';
 import { Icon } from '../lib/icons';
+import { FileIcon } from '../components/FileIcon';
 import { NONE, send } from '../lib/actions';
 import { listen } from '../lib/events';
 import { usePersisted } from '../lib/persist';
@@ -178,7 +179,7 @@ export function MergeTool({ ctx, view }: { ctx: Ctx; view: Extract<CentreView, {
   return (
     <div class={`merge${wrap ? ' merge--wrap' : ''}`} data-testid="merge-tool" tabIndex={0} onKeyDown={onKeyDown}>
       <div class="diff__head">
-        <Icon name="merge" size={13} />
+        <FileIcon path={view.path} />
         <span class="diff__name">{view.path}</span>
         <span class="diff__source">{conflictCount} {conflictCount === 1 ? 'conflict' : 'conflicts'}</span>
         <span class="diff__tools">

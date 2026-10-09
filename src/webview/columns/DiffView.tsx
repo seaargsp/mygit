@@ -5,6 +5,7 @@ import type { CentreView, OpenFile } from '../../panel/messages';
 import type { MenuItem } from '../components/ContextMenu';
 import type { Ctx } from '../lib/ui';
 import { Icon } from '../lib/icons';
+import { FileIcon } from '../components/FileIcon';
 import { splitPath } from '../lib/format';
 import { NONE, send } from '../lib/actions';
 import { listen } from '../lib/events';
@@ -72,7 +73,7 @@ export function DiffView({ ctx, view }: { ctx: Ctx; view: Extract<CentreView, { 
   return (
     <div class="diff" data-testid="diff-view">
       <div class="diff__head">
-        <Icon name="file" size={13} />
+        <FileIcon path={file.path} />
         <span class="diff__path" title={file.path}>
           {dir && <span class="diff__dir"><bdi>{dir}</bdi></span>}
           <span class="diff__name">{name}</span>

@@ -7,6 +7,7 @@ import { NONE, send } from '../lib/actions';
 import { listen } from '../lib/events';
 import { usePersisted } from '../lib/persist';
 import { FindBar } from '../components/FindBar';
+import { FileIcon } from '../components/FileIcon';
 import { DiffBody } from './DiffView';
 import { changeBlocks } from '../lib/wordDiff';
 
@@ -34,6 +35,7 @@ function Header({ ctx, path, children }: { ctx: Ctx; path: string; children?: pr
   const { dir, name } = splitPath(path);
   return (
     <div class="diff__head">
+      <FileIcon path={path} />
       <span class="diff__path" title={path}>
         {dir && <span class="diff__dir"><bdi>{dir}</bdi></span>}
         <span class="diff__name">{name}</span>

@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { useMemo, useRef, useState } from 'preact/hooks';
 import type { FileChange } from '../../git/status';
 import { Icon } from '../lib/icons';
+import { FileIcon, FolderIcon } from './FileIcon';
 import { splitPath } from '../lib/format';
 import { isTyping, primary } from '../lib/events';
 
@@ -158,6 +159,7 @@ export function FileList<T extends FileChange>({ files, mode, activePath, onOpen
       }}
     >
       <StatusMark file={file} />
+      <FileIcon path={file.path} />
       <span class="file-row__open">
         {mode === 'tree' ? <span class="file-row__name" title={file.path}>{file.path.split('/').pop()}</span> : <FilePath path={file.path} oldPath={file.oldPath} />}
       </span>
@@ -173,7 +175,7 @@ export function FileList<T extends FileChange>({ files, mode, activePath, onOpen
           <li key={`dir:${child.path}`} class="file-folder">
             <button class="file-row file-row--folder" style={{ '--depth': depth } as Record<string, number>} aria-expanded={open} onClick={() => setClosed(prev => ({ ...prev, [child.path]: open }))}>
               <span class="chevron" data-open={open}><Icon name="chevron" size={11} /></span>
-              <Icon name="folder" size={12} />
+              <FolderIcon name={child.name.split('/').pop() ?? child.name} open={open} />
               <span class="file-row__name">{child.name}</span>
             </button>
             {open && <ul>{renderFolder(child, depth + 1)}</ul>}

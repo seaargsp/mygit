@@ -18,6 +18,7 @@ import { MergeTool } from './columns/MergeTool';
 import { RebaseView } from './columns/RebaseView';
 import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
+import { setIconTheme } from './components/FileIcon';
 import { setDatePrefs, plural } from './lib/format';
 import { emit, isTyping, primary } from './lib/events';
 import { combineMatches } from './lib/search';
@@ -82,6 +83,7 @@ export function useClientState(onAction: (action: WebviewAction) => void): [Clie
     const off = onExtensionMessage(message => {
       if (message.type === 'state:update') setState(prev => ({ ...prev, ...message.payload }));
       else if (message.type === 'action') actionRef.current(message.payload.action);
+      else if (message.type === 'iconTheme') setIconTheme(message.payload);
     });
     getVsCodeApi().postMessage({ type: 'ready', payload: {} });
     return off;
