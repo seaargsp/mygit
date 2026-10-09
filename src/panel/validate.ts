@@ -24,6 +24,16 @@ const openFile = obj({
   status: optional(fileStatus),
 });
 
+const logQuery = obj({
+  refs: arr(rev, 100),
+  author: str(200),
+  message: str(200),
+  since: isoDate,
+  until: isoDate,
+  path: either<string>(literal(''), relPath),
+  compare: nullable(obj({ left: rev, right: rev })),
+});
+
 const rebasePlan = obj({
   kind: oneOf(['rebase', 'cherry-pick']),
   title: str(1024),
@@ -50,6 +60,8 @@ export const OP_SCHEMAS: Record<OpName, Schema> = {
   'view:merge': obj({ path: relPath }),
   'view:interactiveRebase': obj({ upstream: rev, branch: optional(refName), label: str(1024) }),
   'view:cherryPickMany': obj({ shas: arr(sha, 1000) }),
+  'view:log': obj({ query: logQuery }),
+  'view:logMore': NONE,
   'files:listAll': obj({ rev: nullable(revOrWorking) }),
   'stage:paths': obj({ paths }),
   'stage:unstagePaths': obj({ paths }),

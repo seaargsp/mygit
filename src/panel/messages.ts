@@ -7,8 +7,11 @@ import type { ResetMode, TodoEntry } from '../git/history';
 import type { RepoState } from '../git/repoState';
 import type { PullMode } from '../git/remote';
 import type { TargetConflicts } from '../git/conflicts';
+import type { LogQuery, LogRow } from '../git/log';
 
-export type { DiffContext, PullMode, ResetMode, TodoEntry, IgnoreMode };
+export type { DiffContext, PullMode, ResetMode, TodoEntry, IgnoreMode, LogQuery, LogRow };
+
+export const EMPTY_LOG_QUERY: LogQuery = { refs: [], author: '', message: '', since: '', until: '', path: '', compare: null };
 
 /** Which side of the repository a viewed file comes from. */
 export type DiffSource = 'commit' | 'staged' | 'unstaged' | 'range' | 'stash';
@@ -63,7 +66,16 @@ export type CentreView =
   | { kind: 'history'; path: string; entries: HistoryEntry[] | null; selected: string | null; diff: FileDiff | null }
   | { kind: 'blame'; path: string; rev: string; lines: BlameLine[] | null }
   | { kind: 'merge'; path: string; content: string | null; current: string; incoming: string }
-  | { kind: 'rebase'; plan: RebasePlan };
+  | { kind: 'rebase'; plan: RebasePlan }
+  | {
+    kind: 'log';
+    query: LogQuery;
+    rows: LogRow[];
+    hasMore: boolean;
+    loading: boolean;
+    count: { value: number; done: boolean } | null;
+    error: string | null;
+  };
 
 export type ColumnId = 'refs' | 'graph' | 'message' | 'author' | 'date' | 'sha';
 
@@ -255,6 +267,8 @@ export type Ops = {
   'view:merge': { path: string };
   'view:interactiveRebase': { upstream: string; branch?: string; label: string };
   'view:cherryPickMany': { shas: string[] };
+  'view:log': { query: LogQuery };
+  'view:logMore': Record<string, never>;
   'files:listAll': { rev: string | null };
   'stage:paths': { paths: string[] };
   'stage:unstagePaths': { paths: string[] };

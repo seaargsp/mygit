@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
 import type { RepositoryController } from './controller';
-import type { WebviewAction, WebviewToExtensionMessage } from './panel/messages';
+import { EMPTY_LOG_QUERY, type WebviewAction, type WebviewToExtensionMessage } from './panel/messages';
 import { listAllFiles } from './git/status';
 import { runGit } from './git/gitService';
 import { setHooksPath } from './git/repoState';
@@ -98,6 +98,10 @@ export const COMMANDS: CommandSpec[] = [
     },
   },
   { id: 'mygit.openRepoFolder', title: 'Open Repository in File Manager', run: controller => vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(controller.repoPath)) },
+  { id: 'mygit.showHistory', title: 'Show History', run: controller => {
+    controller.openPanel();
+    return controller.store.openLog(EMPTY_LOG_QUERY);
+  } },
   { id: 'mygit.showActivityLog', title: 'Show Activity Log', run: action('activityLog') },
   { id: 'mygit.checkConflicts', title: 'Check for Conflicts with Target Branches', run: controller => controller.checkConflicts(true) },
   { id: 'mygit.openSettings', title: 'Open Preferences', run: op({ type: 'settings:open', payload: {} }) },

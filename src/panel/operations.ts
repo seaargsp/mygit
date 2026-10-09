@@ -269,6 +269,10 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       return store.openFile(message.payload.file);
     case 'view:close':
       return store.closeView();
+    case 'view:log':
+      return store.openLog(message.payload.query);
+    case 'view:logMore':
+      return store.logMore();
     case 'view:diffContext':
       return store.setDiffContext(message.payload.context);
     case 'view:fileView':

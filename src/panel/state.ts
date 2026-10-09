@@ -7,6 +7,7 @@ import {
   type CommitSearchState,
   type DiffContext,
   type HeadInfo,
+  type LogQuery,
   type OpenFile,
   type PendingOp,
   type Prefs,
@@ -26,7 +27,8 @@ import {
 } from '../git/diff';
 import { getRepoState, headSha, isHeadPushed } from '../git/repoState';
 import { getStashFiles } from '../git/stash';
-import { redactRemote } from '../git/redact';
+import { redactRemote, redactText } from '../git/redact';
+import { LOG_PAGE, countLog, queryLog } from '../git/log';
 
 /** Tree of an empty repository: the left side of a root commit's diff. */
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -104,6 +106,7 @@ export class Store {
   private viewToken = 0;
   private pendingId = 0;
   private searchAbort: AbortController | null = null;
+  private logAbort: AbortController | null = null;
 
   constructor(deps: StoreDeps) {
     this.deps = deps;
@@ -295,6 +298,8 @@ export class Store {
     await Promise.all([status, meta, tracked, graph ?? this.loadGraph(async () => this.visibleRevs())]);
     await this.refreshSelection();
     await this.refreshView();
+    // References or HEAD moved; working-tree edits do not reload the list.
+    if (this.state.view.kind === 'log') await this.openLog(this.state.view.query, true);
   }
 
   /** HEAD from the reference listing, shown until the status scan reports it. */
@@ -682,6 +687,43 @@ export class Store {
     this.setState({ view: { ...view, selected: sha, diff: null } });
     const diff = await getCommitFileDiff(this.repoPath, sha, entry?.path ?? view.path);
     this.patchView(token, { diff });
+  }
+
+  async openLog(query: LogQuery, keepRows = false): Promise<void> {
+    this.logAbort?.abort();
+    const controller = new AbortController();
+    this.logAbort = controller;
+    const previous = this.state.view.kind === 'log' ? this.state.view : null;
+    const limit = keepRows && previous ? Math.max(LOG_PAGE, previous.rows.length) : LOG_PAGE;
+    const token = this.setView({
+      kind: 'log', query, rows: keepRows && previous ? previous.rows : [], hasMore: false, loading: true,
+      count: keepRows && previous ? previous.count : null, error: null,
+    });
+    void countLog(this.repoPath, query, controller.signal).then(
+      value => this.patchView(token, { count: { value, done: true } }),
+      () => undefined,
+    );
+    try {
+      const page = await queryLog(this.repoPath, query, { offset: 0, limit, signal: controller.signal });
+      this.patchView(token, { rows: page.rows, hasMore: page.hasMore, loading: false });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const text = error instanceof GitError ? error.stderr || error.message : error instanceof Error ? error.message : String(error);
+      this.patchView(token, { rows: [], loading: false, error: redactText(text) });
+    }
+  }
+
+  async logMore(): Promise<void> {
+    const view = this.state.view;
+    if (view.kind !== 'log' || !view.hasMore || view.loading) return;
+    const token = this.viewToken;
+    this.patchView(token, { loading: true });
+    try {
+      const page = await queryLog(this.repoPath, view.query, { offset: view.rows.length, limit: LOG_PAGE, signal: this.logAbort?.signal });
+      this.patchView(token, { rows: [...view.rows, ...page.rows], hasMore: page.hasMore, loading: false });
+    } catch {
+      this.patchView(token, { loading: false });
+    }
   }
 
   async openBlame(filePath: string, rev: string): Promise<void> {

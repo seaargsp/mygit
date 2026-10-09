@@ -156,6 +156,11 @@
         "category": "mygit"
       },
       {
+        "command": "mygit.showHistory",
+        "title": "Show History",
+        "category": "mygit"
+      },
+      {
         "command": "mygit.showActivityLog",
         "title": "Show Activity Log",
         "category": "mygit"
