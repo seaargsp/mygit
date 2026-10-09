@@ -9,7 +9,7 @@ import {
   checkoutLocal, checkoutRemote, dropMenu, localBranchMenu, remoteBranchMenu, remoteDialog, remoteMenu, send, stashIds, stashMenu, tagMenu,
   type DropTarget,
 } from '../lib/actions';
-import { loadPersisted, savePersisted, usePersisted } from '../lib/persist';
+import { usePersisted } from '../lib/persist';
 import { Spinner } from '../components/Spinner';
 import { primary } from '../lib/events';
 
@@ -60,8 +60,8 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
   const { repoPrefs, branches, tags, stashes, remotes } = state;
   const [filter, setFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
-  const [collapsedList, setCollapsedList] = useState<string[]>(repoPrefs.collapsed);
-  useEffect(() => setCollapsedList(repoPrefs.collapsed), [repoPrefs.collapsed]);
+  const [collapsedList, setCollapsedList] = useState<string[]>(repoPrefs.collapsed ?? []);
+  useEffect(() => setCollapsedList(repoPrefs.collapsed ?? []), [repoPrefs.collapsed]);
   const collapsed = useMemo(() => new Set(collapsedList), [collapsedList]);
   const toggleKey = (key: string) => {
     const next = collapsed.has(key) ? collapsedList.filter(entry => entry !== key) : [...collapsedList, key];
@@ -94,18 +94,6 @@ export function LeftPanel({ ctx, filterRef, renaming, onRenameDone }: Props) {
     if (maximised) setMaximised(null);
     toggleKey(id);
   };
-
-  // State from before per-repository persistence lived in webview state.
-  useEffect(() => {
-    const legacy = loadPersisted<Record<string, boolean> | null>('leftCollapsed', null);
-    if (!legacy) return;
-    savePersisted('leftCollapsed', undefined);
-    const keys = Object.entries(legacy).filter(([, value]) => value).map(([key]) => key);
-    if (keys.length > 0 && repoPrefs.collapsed.length === 0) {
-      setCollapsedList(keys);
-      send(ctx, 'prefs:collapsed', { collapsed: keys });
-    }
-  }, []);
 
   function reveal(sha: string): void {
     ctx.ui.revealCommit(sha);

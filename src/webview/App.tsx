@@ -23,6 +23,7 @@ import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
 import { setIconTheme } from './components/FileIcon';
 import type { TraceState } from './lib/graphSets';
+import { legacyCollapsedKeys, restoreSnapshot } from './lib/snapshot';
 import { setDatePrefs, plural } from './lib/format';
 import { emit, isTyping, primary } from './lib/events';
 import { combineMatches } from './lib/search';
@@ -76,7 +77,7 @@ type Snapshot = Pick<ClientState, 'repoName' | 'head' | 'branches' | 'tags' | 'r
  */
 function initialState(): ClientState {
   const snapshot = loadPersisted<Snapshot | null>(SNAPSHOT_KEY, null);
-  return snapshot ? { ...EMPTY_STATE, ...snapshot } : EMPTY_STATE;
+  return restoreSnapshot(EMPTY_STATE, snapshot);
 }
 
 export function useClientState(onAction: (action: WebviewAction) => void): [ClientState, (message: WebviewToExtensionMessage) => void] {
@@ -85,8 +86,22 @@ export function useClientState(onAction: (action: WebviewAction) => void): [Clie
   actionRef.current = onAction;
 
   useEffect(() => {
+    let migrated = false;
     const off = onExtensionMessage(message => {
-      if (message.type === 'state:update') setState(prev => ({ ...prev, ...message.payload }));
+      if (message.type === 'state:update') {
+        setState(prev => ({ ...prev, ...message.payload }));
+        // The first update carries the repository's prefs: migrate the Left Panel state an older version kept here.
+        const repoPrefs = message.payload.repoPrefs;
+        if (!migrated && repoPrefs) {
+          migrated = true;
+          const legacy = loadPersisted<Record<string, boolean> | null>('leftCollapsed', null);
+          if (legacy) {
+            savePersisted('leftCollapsed', undefined);
+            const keys = legacyCollapsedKeys(legacy, repoPrefs.collapsed ?? []);
+            if (keys) getVsCodeApi().postMessage({ type: 'prefs:collapsed', payload: { collapsed: keys } });
+          }
+        }
+      }
       else if (message.type === 'action') actionRef.current(message.payload.action);
       else if (message.type === 'iconTheme') setIconTheme(message.payload);
     });
