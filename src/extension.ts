@@ -6,7 +6,8 @@ import { RevisionContentProvider, REVISION_SCHEME } from './panel/revisionConten
 import { RepositoryController } from './controller';
 import { registerCommands } from './commands';
 import { isSourceCheckout, watchBuildOutput } from './devReload';
-import { MIN_GIT, gitVersion, resolveRepoRoot, setGitBinaryPath, setGitTimeout, versionAtLeast } from './git/gitService';
+import { MIN_GIT, gitVersion, resolveRepoRoot, setGitBinaryPath, setGitTimeout, setInteractiveBridge, versionAtLeast } from './git/gitService';
+import { AskpassServer } from './ipc/askpassServer';
 import { getGitDir } from './git/repoState';
 
 let controller: RepositoryController | undefined;
@@ -50,6 +51,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const log = new ActivityLog();
   context.subscriptions.push(log);
+
+  void AskpassServer.start({
+    extensionPath: context.extensionPath,
+    prompter: prompt => Promise.resolve(vscode.window.showInputBox({
+      title: 'mygit: Git credentials',
+      prompt,
+      password: !/username/i.test(prompt),
+      ignoreFocusOut: true,
+    })),
+    onReject: reason => log.application(reason, 'error'),
+  }).then(server => {
+    context.subscriptions.push(server);
+    setInteractiveBridge(server);
+  }, error => {
+    log.application(`Credential prompts unavailable: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    void vscode.window.showWarningMessage('mygit: Git credential prompts are unavailable in this session; operations that need credentials rely on the credential helper.');
+  });
 
   const launcher = new LauncherView(() => controller?.openPanel());
   context.subscriptions.push(vscode.window.registerWebviewViewProvider(LAUNCHER_VIEW_ID, launcher));

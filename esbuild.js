@@ -22,14 +22,24 @@ async function build() {
     sourcemap: true,
   });
 
+  const askpassCtx = await esbuild.context({
+    entryPoints: ['src/ipc/askpass-main.ts'],
+    bundle: true,
+    outfile: 'dist/askpass-main.js',
+    platform: 'node',
+    format: 'cjs',
+  });
+
   if (watch) {
-    await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
+    await Promise.all([extensionCtx.watch(), webviewCtx.watch(), askpassCtx.watch()]);
     console.log('esbuild watching extension.ts and webview/index.tsx ...');
   } else {
     await extensionCtx.rebuild();
     await webviewCtx.rebuild();
+    await askpassCtx.rebuild();
     await extensionCtx.dispose();
     await webviewCtx.dispose();
+    await askpassCtx.dispose();
   }
 }
 

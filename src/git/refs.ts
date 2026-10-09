@@ -171,11 +171,11 @@ export async function fastForwardTag(repoPath: string, tag: TagRef): Promise<voi
 }
 
 export async function pushTag(repoPath: string, name: string, remote: string): Promise<void> {
-  await runGit(repoPath, ['push', END, assertRemoteName('remote', remote), `refs/tags/${assertRefName('tag', name)}`]);
+  await runGit(repoPath, ['push', END, assertRemoteName('remote', remote), `refs/tags/${assertRefName('tag', name)}`], { interactive: true });
 }
 
 export async function deleteRemoteTag(repoPath: string, name: string, remote: string): Promise<void> {
-  await runGit(repoPath, ['push', '--delete', END, assertRemoteName('remote', remote), `refs/tags/${assertRefName('tag', name)}`]);
+  await runGit(repoPath, ['push', '--delete', END, assertRemoteName('remote', remote), `refs/tags/${assertRefName('tag', name)}`], { interactive: true });
 }
 
 /** Every ref name and the commit it points at, for undo snapshots and visibility. */

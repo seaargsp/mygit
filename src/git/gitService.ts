@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as os from 'node:os';
 
 export class GitError extends Error {
@@ -20,7 +21,19 @@ export type GitRunOptions = {
   signal?: AbortSignal;
   /** Upper bound of stdout plus stderr kept in memory; the process is stopped beyond it. */
   maxOutputBytes?: number;
+  /** Foreground command: credential prompts go to VS Code through the askpass bridge. */
+  interactive?: boolean;
 };
+
+export type PauseHandle = { pause(): void; resume(): void };
+/** Supplies the askpass environment for interactive runs and pauses their timeout while a prompt is open. */
+export type InteractiveBridge = { env(id: string): Record<string, string>; register(id: string, timer: PauseHandle): () => void };
+
+let interactiveBridge: InteractiveBridge | undefined;
+
+export function setInteractiveBridge(bridge: InteractiveBridge | undefined): void {
+  interactiveBridge = bridge;
+}
 
 export type GitResult = { stdout: string; stderr: string; code: number };
 
@@ -57,10 +70,13 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
   const started = Date.now();
   return new Promise((resolve, reject) => {
     const posix = process.platform !== 'win32';
+    const bridge = opts.interactive ? interactiveBridge : undefined;
+    const invocation = crypto.randomUUID();
+    let unregister: (() => void) | undefined;
     const child = spawn(gitBinaryPath, args, {
       cwd: repoPath,
       // A git that wants a terminal (credential or editor prompt) would hang the client.
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...opts.env },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(bridge ? bridge.env(invocation) : {}), ...opts.env },
       // Own process group, so a timeout also ends the ssh, credential helper or hook git started.
       detached: posix,
     });
@@ -70,7 +86,8 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
     const fail = (error: GitError, stderr: string) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      disarm();
+      unregister?.();
       opts.signal?.removeEventListener('abort', onAbort);
       logger?.({ args, durationMs: Date.now() - started, ok: false, stderr });
       reject(error);
@@ -96,9 +113,23 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
       fail(new GitError(`git ${args.join(' ')} failed: ${detail}`, detail, args, null), detail);
     };
     const timeoutMs = opts.timeoutMs ?? defaultTimeoutMs;
-    const timer = timeoutMs > 0
-      ? setTimeout(() => stop(`git ${args[0] ?? ''} timed out after ${Math.round(timeoutMs / 1000)} s (mygit.gitTimeout)`), timeoutMs)
-      : undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let remaining = timeoutMs;
+    let armedAt = 0;
+    const onTimeout = () => stop(`git ${args[0] ?? ''} timed out after ${Math.round(timeoutMs / 1000)} s (mygit.gitTimeout)`);
+    const arm = () => {
+      if (timeoutMs <= 0 || settled || timer !== undefined) return;
+      armedAt = Date.now();
+      timer = setTimeout(onTimeout, remaining);
+    };
+    const disarm = () => {
+      if (timer === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+      remaining = Math.max(0, remaining - (Date.now() - armedAt));
+    };
+    arm();
+    if (bridge) unregister = bridge.register(invocation, { pause: disarm, resume: arm });
     const onAbort = () => stop(`git ${args[0] ?? ''} aborted`);
     if (opts.signal?.aborted) onAbort();
     else opts.signal?.addEventListener('abort', onAbort, { once: true });
@@ -127,7 +158,8 @@ export function runGitFull(repoPath: string, args: string[], opts: GitRunOptions
         return;
       }
       settled = true;
-      clearTimeout(timer);
+      disarm();
+      unregister?.();
       opts.signal?.removeEventListener('abort', onAbort);
       logger?.({ args, durationMs: Date.now() - started, ok, stderr });
       resolve({ stdout, stderr, code: code ?? 0 });

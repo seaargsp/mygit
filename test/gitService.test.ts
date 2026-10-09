@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { runGitFull, setGitBinaryPath, setGitTimeout } from '../src/git/gitService';
+import { runGitFull, setGitBinaryPath, setGitTimeout, setInteractiveBridge } from '../src/git/gitService';
 import { listBranches } from '../src/git/refs';
 
 describe('runGitFull timeout', () => {
@@ -72,4 +72,27 @@ describe('runGitFull process handling', () => {
     await new Promise(resolve => setTimeout(resolve, 3500));
     expect(() => process.kill(pid, 0)).toThrow();
   }, 10_000);
+});
+
+describe('interactive bridge', () => {
+  afterEach(() => {
+    setInteractiveBridge(undefined);
+    setGitBinaryPath('git');
+  });
+
+  it('adds the bridge environment to interactive runs only', async () => {
+    setInteractiveBridge({ env: () => ({ MYGIT_PROBE: 'yes' }), register: () => () => undefined });
+    setGitBinaryPath('/bin/sh');
+    expect((await runGitFull(os.tmpdir(), ['-c', 'echo "$MYGIT_PROBE"'], { interactive: true })).stdout.trim()).toBe('yes');
+    expect((await runGitFull(os.tmpdir(), ['-c', 'echo "$MYGIT_PROBE"'])).stdout.trim()).toBe('');
+  });
+
+  it('does not time out while the bridge has paused the timer', async () => {
+    let handle: { pause(): void; resume(): void } | undefined;
+    setInteractiveBridge({ env: () => ({}), register: (_id, timer) => { handle = timer; return () => undefined; } });
+    setGitBinaryPath('/bin/sh');
+    const run = runGitFull(os.tmpdir(), ['-c', 'sleep 0.5'], { interactive: true, timeoutMs: 200 });
+    handle!.pause();
+    await expect(run).resolves.toMatchObject({ code: 0 });
+  });
 });

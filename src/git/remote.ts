@@ -60,7 +60,7 @@ export async function deleteLocalBranch(repoPath: string, name: string, force: b
 }
 
 export async function deleteRemoteBranch(repoPath: string, remote: string, branch: string): Promise<void> {
-  await runGit(repoPath, ['push', '--delete', END, assertRemoteName('remote', remote), assertRefName('branch', branch)]);
+  await runGit(repoPath, ['push', '--delete', END, assertRemoteName('remote', remote), assertRefName('branch', branch)], { interactive: true });
 }
 
 export async function setUpstream(repoPath: string, branch: string, upstream: string): Promise<void> {
@@ -90,7 +90,7 @@ export async function pullBranch(repoPath: string, branch: string): Promise<void
   const merge = await config(`branch.${branch}.merge`);
   if (!remote || !merge) throw new Error(`${branch} has no upstream to pull from. Set one with "Set Upstream".`);
   try {
-    await runGit(repoPath, ['fetch', END, remote, `${merge}:refs/heads/${branch}`]);
+    await runGit(repoPath, ['fetch', END, remote, `${merge}:refs/heads/${branch}`], { interactive: true });
   } catch (error) {
     if (error instanceof GitError && /non-fast-forward|rejected/.test(error.stderr)) {
       throw new Error(`${branch} has diverged from its upstream, so it cannot be fast-forwarded. Check it out and pull to merge or rebase.`);
@@ -117,7 +117,7 @@ export async function fetch(
   if (opts.remote) args.push(END, assertRemoteName('remote', opts.remote));
   else args.push('--all');
   // A background fetch has no user to answer a credential prompt: it fails instead of waiting.
-  await runGit(repoPath, args, opts.background ? { env: NON_INTERACTIVE_ENV, timeoutMs: BACKGROUND_FETCH_TIMEOUT_MS } : {});
+  await runGit(repoPath, args, opts.background ? { env: NON_INTERACTIVE_ENV, timeoutMs: BACKGROUND_FETCH_TIMEOUT_MS } : { interactive: true });
 }
 
 export type PullMode = 'fetch' | 'ff' | 'ff-only' | 'rebase';
@@ -132,7 +132,7 @@ export async function pull(repoPath: string, mode: PullMode, prune: boolean): Pr
   if (mode === 'ff-only') args.push('--ff-only');
   if (mode === 'rebase') args.push('--rebase', '--autostash');
   if (prune) args.push('--prune');
-  await runGit(repoPath, args, { env: { GIT_EDITOR: 'true' } });
+  await runGit(repoPath, args, { env: { GIT_EDITOR: 'true' }, interactive: true });
 }
 
 export class PushRejectedError extends Error {
@@ -158,7 +158,7 @@ export async function push(
     }
   }
   try {
-    await runGit(repoPath, args);
+    await runGit(repoPath, args, { interactive: true });
   } catch (error) {
     if (error instanceof GitError && /\[rejected\]|non-fast-forward|fetch first|stale info/.test(error.stderr)) {
       throw new PushRejectedError(error.stderr);
