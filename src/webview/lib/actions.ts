@@ -1,7 +1,9 @@
 import type { LaneCommit } from '../../git/graph';
 import type { FileChange } from '../../git/status';
 import type { StashRef, TagRef } from '../../git/refs';
-import type { ClientState, DiffSource, OpName, Ops, ResetMode, WebviewToExtensionMessage } from '../../panel/messages';
+import type { ClientState, DiffSource, LogQuery, OpName, Ops, ResetMode, WebviewToExtensionMessage } from '../../panel/messages';
+import { EMPTY_LOG_QUERY } from '../../panel/messages';
+import { loadPersisted } from './persist';
 import type { MenuItem } from '../components/ContextMenu';
 import { confirmDialog, promptDialog, type DialogRequest } from '../components/Dialog';
 import { branchNameError, dragRefLabel, type Ctx, type DragRef, type InlineRequest } from './ui';
@@ -17,6 +19,13 @@ export function send<K extends OpName>(ctx: Pick<Ctx, 'dispatch'>, type: K, payl
 
 const NONE = {} as Record<string, never>;
 export { NONE };
+
+export const LOG_QUERY_KEY = 'logQuery';
+
+/** Opens the History view with `query`, or the last query used. */
+export function openHistory(ctx: Pick<Ctx, 'dispatch'>, query?: LogQuery): void {
+  send(ctx, 'view:log', { query: query ?? loadPersisted<LogQuery>(LOG_QUERY_KEY, EMPTY_LOG_QUERY) });
+}
 
 const sep: MenuItem = { kind: 'separator' };
 const item = (label: string, onSelect: () => void, extra: Partial<Extract<MenuItem, { kind: 'item' }>> = {}): MenuItem => ({ kind: 'item', label, onSelect, ...extra });
@@ -411,6 +420,7 @@ export function localBranchMenu(ctx: Ctx, name: string, multi: string[] = []): M
     ...visibilityItems(ctx, [id]),
     sep,
     item('Compare commit against working directory', () => send(ctx, 'graph:select', { shas: ['working-tree', branch.sha] })),
+    item(`Show history of ${name}`, () => openHistory(ctx, { ...EMPTY_LOG_QUERY, refs: [name] })),
     item('Copy branch name', () => send(ctx, 'clipboard:write', { text: name })),
   ];
 }
@@ -434,6 +444,7 @@ export function remoteBranchMenu(ctx: Ctx, remote: string, branch: string): Menu
     item(`Delete ${qualified}`, () => ctx.ui.openDialog(confirmDialog(`Delete ${qualified}`, `The branch is deleted on ${remote} for everyone. This cannot be undone.`, 'Delete', () => send(ctx, 'branch:deleteRemote', { remote, branch }), true)), { danger: true }),
     sep,
     ...visibilityItems(ctx, [`refs/remotes/${qualified}`]),
+    item(`Show history of ${qualified}`, () => openHistory(ctx, { ...EMPTY_LOG_QUERY, refs: [qualified] })),
     item('Copy branch name', () => send(ctx, 'clipboard:write', { text: qualified })),
   ];
 }
@@ -479,6 +490,7 @@ export function tagMenu(ctx: Ctx, tag: TagRef): MenuItem[] {
     ...perRemote(remote => `Delete ${tag.name} from ${remote}`, remote => ctx.ui.openDialog(confirmDialog(`Delete ${tag.name} from ${remote}`, `The tag is deleted on ${remote} for everyone. This is permanent.`, 'Delete', () => send(ctx, 'tag:deleteRemote', { name: tag.name, remote }), true)), true),
     sep,
     ...visibilityItems(ctx, [`refs/tags/${tag.name}`]),
+    item(`Show history of ${tag.name}`, () => openHistory(ctx, { ...EMPTY_LOG_QUERY, refs: [`refs/tags/${tag.name}`] })),
     item('Copy tag name', () => send(ctx, 'clipboard:write', { text: tag.name })),
   ];
 }

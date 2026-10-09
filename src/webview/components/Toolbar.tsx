@@ -3,7 +3,7 @@ import type { Ref } from 'preact';
 import type { PullMode } from '../../panel/messages';
 import { isPending, type Ctx } from '../lib/ui';
 import { Icon, type IconName } from '../lib/icons';
-import { NONE, createBranchAt, pushFlow, send, sparseDialog } from '../lib/actions';
+import { NONE, createBranchAt, openHistory, pushFlow, send, sparseDialog } from '../lib/actions';
 import { ConflictIndicator } from './ConflictIndicator';
 import { Spinner } from './Spinner';
 import { isMac } from '../lib/events';
@@ -145,6 +145,10 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
         <div class="toolbar__group">
           <ToolButton icon="stash" label="Stash" labels={labels} busy={isPending(state, 'stash:save')} disabled={!dirty} title="Stash all uncommitted changes" onClick={() => send(ctx, 'stash:save', { message: wipLabel || undefined })} />
           <ToolButton icon="pop" label="Pop" labels={labels} busy={isPending(state, 'stash:pop')} disabled={stashes.length === 0} title={stashes[0] ? `Pop "${stashes[0].message}"` : 'No stashes'} onClick={() => send(ctx, 'stash:pop', {})} />
+        </div>
+
+        <div class="toolbar__group">
+          <ToolButton icon="history" label="History" labels={labels} busy={isPending(state, 'view:log')} title="Commit history with filters" onClick={() => openHistory(ctx)} />
         </div>
 
         {(repo?.lfs || repo?.sparse.enabled) && (

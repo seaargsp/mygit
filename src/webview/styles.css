@@ -1236,3 +1236,21 @@ mark.word--del { background: var(--diff-del-word); }
 .trace-chip__mode { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 2px; }
 .trace-chip__note { display: inline-flex; gap: 4px; align-items: center; }
 .commit-row--trace-origin .commit-row__subject { font-weight: 600; }
+
+.log-view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.log-filters { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--text-dim); }
+.log-filter { display: inline-flex; align-items: center; gap: 4px; }
+.log-filter .field { width: 130px; }
+.log-filter--refs .chip { display: inline-flex; align-items: center; gap: 2px; }
+.field--error { border-color: var(--danger); }
+.log-view__scroll { flex: 1; min-height: 0; overflow: auto; }
+.log-list { list-style: none; margin: 0; padding: 0; outline: none; }
+.log-group { padding: 6px 10px 2px; font-size: 11px; color: var(--text-faint); text-transform: uppercase; }
+.log-row { display: grid; grid-template-columns: 70px auto minmax(120px, 1fr) 140px 110px; gap: 8px; align-items: center; height: 24px; padding: 0 10px; cursor: default; }
+.log-row:hover { background: var(--surface-hover); }
+.log-row[aria-selected="true"] { background: var(--surface-active); }
+.log-row__sha { font-family: var(--vscode-editor-font-family, monospace); color: var(--text-faint); }
+.log-row__refs { display: inline-flex; gap: 3px; overflow: hidden; }
+.log-row__message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-row__author, .log-row__date { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+.log-view__foot { display: flex; gap: 12px; padding: 4px 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--text-dim); }

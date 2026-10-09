@@ -18,6 +18,8 @@ export type Ui = {
   startRename(branch: string): void;
   /** Highlights the ancestors and/or descendants of a commit in the graph. */
   trace(sha: string, mode: TraceMode): void;
+  /** Shows a commit in the graph, loading older history down to it when needed. */
+  showCommit(sha: string): void;
 };
 
 export type Dispatch = (message: WebviewToExtensionMessage) => void;

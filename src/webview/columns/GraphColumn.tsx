@@ -270,11 +270,19 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
     else if (top + ROW_HEIGHT > element.scrollTop + element.clientHeight) element.scrollTop = top + ROW_HEIGHT - element.clientHeight;
   }
 
+  // A commit revealed before it is loaded scrolls into view once the graph reaches it.
+  const pendingReveal = useRef<string | null>(null);
   useEffect(() => {
-    if (!reveal) return;
-    const row = rowIndex.get(reveal.sha);
-    if (row !== undefined) scrollToRow(row, 'center');
+    if (reveal) pendingReveal.current = reveal.sha;
   }, [reveal?.nonce]);
+  useEffect(() => {
+    const sha = pendingReveal.current;
+    if (!sha) return;
+    const row = rowIndex.get(sha);
+    if (row === undefined) return;
+    scrollToRow(row, 'center');
+    pendingReveal.current = null;
+  }, [reveal?.nonce, rowIndex]);
 
   // A match below the loaded rows scrolls into view once the graph has been extended to it.
   const pendingScroll = useRef<string | null>(null);

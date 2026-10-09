@@ -16,6 +16,7 @@ import { DiffView } from './columns/DiffView';
 import { HistoryView, BlameView } from './columns/HistoryViews';
 import { MergeTool } from './columns/MergeTool';
 import { RebaseView } from './columns/RebaseView';
+import { LogView } from './columns/LogView';
 import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
 import { setIconTheme } from './components/FileIcon';
@@ -184,6 +185,13 @@ export function App() {
         return;
       }
       setRenaming(branch);
+    },
+    showCommit(sha: string) {
+      const current = stateRef.current;
+      if (current.view.kind !== 'graph') dispatch({ type: 'view:close', payload: NONE });
+      if (current.commitLog.some(commit => commit.sha === sha)) dispatch({ type: 'graph:select', payload: { shas: [sha] } });
+      else dispatch({ type: 'graph:reveal', payload: { sha } });
+      setReveal({ sha, nonce: Date.now() });
     },
     trace(sha, mode) {
       setTrace({ origin: sha, mode });
@@ -356,6 +364,9 @@ export function App() {
       break;
     case 'rebase':
       centre = <RebaseView ctx={ctx} view={view} />;
+      break;
+    case 'log':
+      centre = <LogView ctx={ctx} view={view} />;
       break;
     default:
       centre = (
