@@ -32,3 +32,10 @@ describe('workspace trust', () => {
     expect(manifest.capabilities.virtualWorkspaces).toBe(false);
   });
 });
+
+describe('packaging', () => {
+  it('keeps local agent workspaces out of the VSIX', () => {
+    const ignore = fs.readFileSync(path.join(__dirname, '..', '.vscodeignore'), 'utf8').split('\n').map(line => line.trim());
+    expect(ignore).toContain('.superpowers/**');
+  });
+});
