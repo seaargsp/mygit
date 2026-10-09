@@ -315,43 +315,6 @@ export type OpName = keyof Ops;
 
 export type WebviewToExtensionMessage = { [K in OpName]: { type: K; payload: Ops[K] } }[OpName];
 
-/** Completeness is checked by the compiler: every op must appear here. */
-const OP_NAMES: Record<OpName, true> = {
-  'ready': true, 'graph:select': true, 'graph:loadMore': true, 'graph:loadAll': true,
-  'graph:search': true, 'graph:reveal': true,
-  'view:openFile': true, 'view:close': true, 'view:diffContext': true, 'view:fileView': true,
-  'view:history': true, 'view:historySelect': true, 'view:blame': true, 'view:merge': true,
-  'view:interactiveRebase': true, 'view:cherryPickMany': true, 'files:listAll': true,
-  'stage:paths': true, 'stage:unstagePaths': true, 'stage:discard': true, 'stage:all': true,
-  'stage:unstageAll': true, 'stage:discardAll': true, 'stage:lines': true, 'hunk:revert': true,
-  'file:open': true, 'file:externalDiff': true, 'file:reveal': true, 'file:create': true,
-  'file:delete': true, 'file:ignore': true, 'file:restore': true, 'file:takeSide': true,
-  'patch:commits': true, 'patch:files': true, 'merge:save': true, 'merge:external': true,
-  'commit:create': true, 'commit:editMessage': true, 'commit:revert': true, 'commit:reset': true,
-  'commit:cherryPick': true, 'commit:squash': true, 'commit:drop': true, 'commit:checkout': true,
-  'branch:checkout': true, 'branch:checkoutRemote': true, 'branch:create': true, 'branch:rename': true,
-  'branch:delete': true, 'branch:deleteRemote': true, 'branch:setUpstream': true, 'branch:fastForward': true, 'branch:pull': true,
-  'branch:merge': true, 'branch:rebase': true, 'branch:rebaseRange': true, 'branch:pushTo': true,
-  'branch:pin': true, 'refs:hide': true, 'refs:solo': true, 'graph:smartVisibility': true,
-  'prefs:columns': true, 'prefs:sections': true, 'prefs:collapsed': true, 'tag:create': true, 'tag:delete': true,
-  'tag:deleteRemote': true, 'tag:push': true, 'tag:annotate': true, 'tag:fastForward': true,
-  'remote:fetch': true, 'remote:pull': true, 'remote:setDefaultPull': true, 'remote:push': true,
-  'remote:add': true, 'remote:edit': true, 'remote:remove': true, 'stash:save': true,
-  'stash:apply': true, 'stash:pop': true, 'stash:drop': true, 'stash:rename': true,
-  'op:continue': true, 'op:abort': true, 'op:skip': true, 'rebase:start': true,
-  'undo': true, 'redo': true, 'clipboard:write': true, 'settings:open': true,
-  'template:save': true, 'sparse:set': true, 'lfs:run': true, 'conflicts:check': true,
-  'conflicts:ignore': true, 'log:clear': true, 'command': true,
-};
-
-export function parseWebviewMessage(raw: unknown): WebviewToExtensionMessage | null {
-  if (typeof raw !== 'object' || raw === null || !('type' in raw)) return null;
-  const type = (raw as { type: unknown }).type;
-  if (typeof type !== 'string' || !(type in OP_NAMES)) return null;
-  const payload = (raw as { payload?: unknown }).payload;
-  return { type, payload: typeof payload === 'object' && payload !== null ? payload : {} } as WebviewToExtensionMessage;
-}
-
 type RefsOf = { [K in OpName]?: (payload: Ops[K], head: string | null, remotes: string[]) => string[] };
 
 const none = () => [];

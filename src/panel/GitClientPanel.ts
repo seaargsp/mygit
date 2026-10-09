@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { ExtensionToWebviewMessage, WebviewAction, WebviewToExtensionMessage } from './messages';
-import { parseWebviewMessage } from './messages';
+import { parseWebviewMessage } from './validate';
 
 export const GIT_CLIENT_VIEW_TYPE = 'mygit.client';
 
@@ -35,6 +35,8 @@ export type PanelHandlers = {
   /** The webview document (re)loaded and needs the full state. */
   onReady(): void;
   onDispose(): void;
+  /** A message failed validation. */
+  onReject(reason: string): void;
 };
 
 /** The client UI: one editor-area webview panel per window. */
@@ -48,7 +50,7 @@ export class ClientPanel {
     panel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'mygit.svg');
     if (setHtml) panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
     panel.webview.onDidReceiveMessage(raw => {
-      const message = parseWebviewMessage(raw);
+      const message = parseWebviewMessage(raw, reason => handlers.onReject(reason));
       if (!message) return;
       if (message.type === 'ready') handlers.onReady();
       else handlers.onMessage(message);

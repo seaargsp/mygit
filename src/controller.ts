@@ -95,6 +95,7 @@ export class RepositoryController implements vscode.Disposable, Host {
       onDispose: () => {
         this.panel = undefined;
       },
+      onReject: (reason: string) => this.log.application(`Rejected webview message: ${reason}`, 'error'),
     };
   }
 

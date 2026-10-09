@@ -699,7 +699,7 @@ export function revisionFileMenu(ctx: Ctx, file: FileChange, rev: string, from: 
 }
 
 export function createFileDialog(ctx: Ctx): void {
-  ctx.ui.openDialog(promptDialog('Create file', 'File path (a / creates folders)', 'Create', path => send(ctx, 'file:create', { path }), {
+  ctx.ui.openDialog(promptDialog('Create file', 'File path (a / creates folders)', 'Create', path => send(ctx, 'file:create', { path: path.replace(/^\/+/, '') }), {
     placeholder: 'src/utils.js',
     validate: value => (ctx.state.workingTreeStatus.unstaged.some(file => file.path === value) ? `${value} already exists.` : null),
   }));
