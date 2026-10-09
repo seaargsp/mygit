@@ -1,6 +1,7 @@
 import type { ClientState, OpName, WebviewToExtensionMessage } from '../../panel/messages';
 import type { MenuItem } from '../components/ContextMenu';
 import type { DialogRequest } from '../components/Dialog';
+import type { TraceMode } from './graphSets';
 
 /** Inline name field on a graph row (branch or lightweight tag creation). */
 export type InlineRequest = { kind: 'branch' | 'tag'; sha: string };
@@ -15,6 +16,8 @@ export type Ui = {
   revealCommit(sha: string): void;
   /** Left Panel inline rename of a local branch. */
   startRename(branch: string): void;
+  /** Highlights the ancestors and/or descendants of a commit in the graph. */
+  trace(sha: string, mode: TraceMode): void;
 };
 
 export type Dispatch = (message: WebviewToExtensionMessage) => void;

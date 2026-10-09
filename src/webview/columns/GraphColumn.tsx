@@ -14,6 +14,7 @@ import { isTyping, primary } from '../lib/events';
 import { useAutoFocus } from '../lib/persist';
 import { GraphRail, LANE_WIDTH, ROW_HEIGHT, buildEdges } from './GraphRail';
 import { Spinner } from '../components/Spinner';
+import { traceSet, type TraceMode, type TraceState } from '../lib/graphSets';
 
 export type SearchState = { active: boolean; matches: Set<string>; current: string | null };
 
@@ -25,6 +26,8 @@ type Props = {
   reveal: { sha: string; nonce: number } | null;
   wipLabel: string;
   setWipLabel: (label: string) => void;
+  trace: TraceState | null;
+  setTrace: (next: TraceState | null) => void;
 };
 
 const OVERSCAN = 24;
@@ -89,7 +92,7 @@ function groupRefs(refs: ParsedRef[], showBranches: boolean, showTags: boolean):
   return [...groups.values()];
 }
 
-export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabel, setWipLabel }: Props) {
+export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabel, setWipLabel, trace, setTrace }: Props) {
   const { state, dispatch } = ctx;
   const { commitLog, selection, workingTreeStatus, head, repoPrefs, prefs } = state;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -132,11 +135,14 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
     return set;
   }, [hoverBranch, owners, prefs.highlightOnBranchHover]);
 
+  const traced = useMemo(() => (trace ? traceSet(commitLog, trace.origin, trace.mode) : null), [commitLog, trace?.origin, trace?.mode]);
+
   const isDim = (sha: string): boolean => {
     const row = rowIndex.get(sha);
     const commit = row === undefined ? undefined : commitLog[row - rowOffset];
     if (commit?.muted) return true;
     if (search.active && !search.matches.has(sha)) return true;
+    if (traced && !traced.has(sha)) return true;
     if (branchSet && !branchSet.has(sha)) return true;
     if (authorFilter && commit && !commit.stash && !authorFilter.includes(commit.author)) return true;
     return false;
@@ -352,6 +358,14 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
     } else if (key === 'ArrowUp' || lower === 'k') {
       event.preventDefault();
       keyboardSelect(current - 1);
+    } else if (lower === 't' && !primary(event) && !event.altKey && !event.shiftKey) {
+      event.preventDefault();
+      const sha = selection.length === 1 ? selection[0] : null;
+      if (!sha || sha === 'working-tree') return;
+      const cycle: (TraceMode | null)[] = [null, 'ancestors', 'both'];
+      const currentMode = trace && trace.origin === sha ? trace.mode : null;
+      const next = cycle[(cycle.indexOf(currentMode) + 1) % cycle.length];
+      setTrace(next ? { origin: sha, mode: next } : null);
     } else if (key === 'ArrowLeft' || lower === 'h' || key === 'ArrowRight' || lower === 'l') {
       event.preventDefault();
       const right = key === 'ArrowRight' || lower === 'l';
@@ -553,6 +567,31 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
 
   return (
     <div class="graph" data-testid="graph-column">
+      {trace && (
+        <div class="trace-chip" role="status">
+          <Icon name="trace" size={12} />
+          <span>Tracing {shortSha(trace.origin)}</span>
+          <select
+            class="trace-chip__mode"
+            aria-label="Trace direction"
+            value={trace.mode}
+            onChange={event => setTrace({ ...trace, mode: (event.target as HTMLSelectElement).value as TraceMode })}
+          >
+            <option value="ancestors">ancestors</option>
+            <option value="descendants">descendants</option>
+            <option value="both">both</option>
+          </select>
+          {state.hasMore && trace.mode !== 'descendants' && traced?.has(commitLog[commitLog.length - 1]?.sha ?? '') && (
+            <span class="trace-chip__note">
+              older commits not loaded
+              <button class="link-btn" onClick={() => send(ctx, 'graph:loadAll', NONE)}>Load all</button>
+            </span>
+          )}
+          <button class="icon-btn icon-btn--small" aria-label="Stop tracing" title="Stop tracing (Esc)" onClick={() => setTrace(null)}>
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      )}
       <div class="graph__head" style={style} onContextMenu={event => ctx.ui.openMenu(event, columnMenu())}>
         {columns.map(id => (
           <div
@@ -637,6 +676,7 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
               search.current === commit.sha ? 'commit-row--match' : '',
               dropRow === commit.sha ? 'commit-row--drop' : '',
               commit.sha === head.sha ? 'commit-row--head' : '',
+              trace?.origin === commit.sha ? 'commit-row--trace-origin' : '',
             ].filter(Boolean).join(' ');
             return (
               <div

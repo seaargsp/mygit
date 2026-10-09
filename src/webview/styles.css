@@ -1231,3 +1231,8 @@ mark.word--del { background: var(--diff-del-word); }
 
 .file-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 16px; height: 16px; font-size: 11px; line-height: 1; }
 .file-icon::before { display: block; line-height: 1; -webkit-font-smoothing: antialiased; }
+
+.trace-chip { display: flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 11px; color: var(--text-dim); background: var(--surface-0); border-bottom: 1px solid var(--line); }
+.trace-chip__mode { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 2px; }
+.trace-chip__note { display: inline-flex; gap: 4px; align-items: center; }
+.commit-row--trace-origin .commit-row__subject { font-weight: 600; }

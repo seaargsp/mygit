@@ -13,6 +13,7 @@ const SHORTCUTS: [string, string][] = [
   ['Stage all and commit', m('⌘⇧Enter', 'Ctrl+Shift+Enter')],
   ['Focus commit message box', m('⌘⇧M', 'Ctrl+Shift+M')],
   ['Select older / newer commit', 'J or ↓ / K or ↑'],
+  ['Trace ancestors / both / off (selected commit)', 'T'],
   ['Move between lanes', 'H or ← / L or →'],
   ['Next / previous commit in branch', 'Shift+J / Shift+K'],
   ['First / last commit in graph', m('⌘↑ / ⌘↓', 'Ctrl+Home / Ctrl+End')],

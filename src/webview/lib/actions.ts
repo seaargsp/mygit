@@ -7,6 +7,9 @@ import { confirmDialog, promptDialog, type DialogRequest } from '../components/D
 import { branchNameError, dragRefLabel, type Ctx, type DragRef, type InlineRequest } from './ui';
 import { emit } from './events';
 import { plural, shortSha } from './format';
+import { ancestorsOf } from './graphSets';
+
+export { ancestorsOf } from './graphSets';
 
 export function send<K extends OpName>(ctx: Pick<Ctx, 'dispatch'>, type: K, payload: Ops[K]): void {
   ctx.dispatch({ type, payload } as WebviewToExtensionMessage);
@@ -19,32 +22,6 @@ const sep: MenuItem = { kind: 'separator' };
 const item = (label: string, onSelect: () => void, extra: Partial<Extract<MenuItem, { kind: 'item' }>> = {}): MenuItem => ({ kind: 'item', label, onSelect, ...extra });
 
 // ------------------------------------------------------------------ history helpers
-
-const ancestorCache = new WeakMap<LaneCommit[], Map<string, Set<string>>>();
-
-/** Commits reachable from `sha` within the loaded graph (sha included). */
-export function ancestorsOf(commitLog: LaneCommit[], sha: string | null): Set<string> {
-  if (!sha) return new Set();
-  let perLog = ancestorCache.get(commitLog);
-  if (!perLog) {
-    perLog = new Map();
-    ancestorCache.set(commitLog, perLog);
-  }
-  const cached = perLog.get(sha);
-  if (cached) return cached;
-  const bySha = new Map(commitLog.map(commit => [commit.sha, commit]));
-  const result = new Set<string>();
-  const stack = [sha];
-  while (stack.length > 0) {
-    const next = stack.pop()!;
-    if (result.has(next)) continue;
-    result.add(next);
-    const commit = bySha.get(next);
-    if (commit && !commit.stash) stack.push(...commit.parents);
-  }
-  perLog.set(sha, result);
-  return result;
-}
 
 export function branchesAt(state: ClientState, sha: string): string[] {
   return state.branches.local.filter(branch => branch.sha === sha).map(branch => branch.name);
@@ -330,6 +307,10 @@ export function commitMenu(ctx: Ctx, commit: LaneCommit): MenuItem[] {
     sep,
     item('Compare commit against working directory', () => send(ctx, 'graph:select', { shas: ['working-tree', commit.sha] })),
     item('Create patch from commit', () => send(ctx, 'patch:commits', { shas: [commit.sha] })),
+    sep,
+    item('Trace ancestors', () => ctx.ui.trace(commit.sha, 'ancestors')),
+    item('Trace descendants', () => ctx.ui.trace(commit.sha, 'descendants')),
+    item('Trace both', () => ctx.ui.trace(commit.sha, 'both')),
     sep,
     item('Copy commit SHA', () => copy(commit.sha)),
     item('Copy commit message', () => copy(commit.body ? `${commit.message}\n\n${commit.body}` : commit.message)),

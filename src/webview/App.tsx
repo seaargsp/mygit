@@ -19,6 +19,7 @@ import { RebaseView } from './columns/RebaseView';
 import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
 import { setIconTheme } from './components/FileIcon';
+import type { TraceState } from './lib/graphSets';
 import { setDatePrefs, plural } from './lib/format';
 import { emit, isTyping, primary } from './lib/events';
 import { combineMatches } from './lib/search';
@@ -138,6 +139,9 @@ export function App() {
   const [query, setQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
   const [wipLabel, setWipLabel] = useState('');
+  const [trace, setTrace] = useState<TraceState | null>(null);
+  const traceRef = useRef(trace);
+  traceRef.current = trace;
   const searchRef = useRef<HTMLInputElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const stateRef = useRef(state);
@@ -181,11 +185,22 @@ export function App() {
       }
       setRenaming(branch);
     },
+    trace(sha, mode) {
+      setTrace({ origin: sha, mode });
+      dispatch({ type: 'graph:select', payload: { shas: [sha] } });
+    },
   }), []);
   const leftCollapsedRef = useRef(leftCollapsed);
   leftCollapsedRef.current = leftCollapsed;
 
   const ctx: Ctx = { state, dispatch, ui };
+
+  // The trace follows a single selected commit until cleared.
+  useEffect(() => {
+    const only = state.selection.length === 1 ? state.selection[0] : null;
+    if (!only || only === 'working-tree') return;
+    setTrace(current => (current && current.origin !== only ? { ...current, origin: only } : current));
+  }, [state.selection]);
 
   // ------------------------------------------------------------ search
 
@@ -283,6 +298,7 @@ export function App() {
       if (event.key === 'Escape') {
         if (inline) setInline(null);
         else if (stateRef.current.view.kind !== 'graph') dispatch({ type: 'view:close', payload: NONE });
+        else if (traceRef.current) setTrace(null);
         else if (logOpen) setLogOpen(false);
         return;
       }
@@ -351,6 +367,8 @@ export function App() {
           reveal={reveal}
           wipLabel={wipLabel}
           setWipLabel={setWipLabel}
+          trace={trace}
+          setTrace={setTrace}
         />
       );
   }
