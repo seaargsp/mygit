@@ -26,6 +26,7 @@ import {
 } from '../git/diff';
 import { getRepoState, headSha, isHeadPushed } from '../git/repoState';
 import { getStashFiles } from '../git/stash';
+import { redactRemote } from '../git/redact';
 
 /** Tree of an empty repository: the left side of a root commit's diff. */
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
@@ -270,7 +271,7 @@ export class Store {
       listStashes(this.repoPath),
       initial ? headSha(this.repoPath) : Promise.resolve(null),
     ]);
-    this.setState({ branches, tags, remotes, stashes, undo: this.journal.labels(), loading: { ...this.state.loading, refs: false } });
+    this.setState({ branches, tags, remotes: remotes.map(redactRemote), stashes, undo: this.journal.labels(), loading: { ...this.state.loading, refs: false } });
     if (this.state.loading.status) this.setState({ head: this.provisionalHead(branches.local, sha) });
     if (this.rawLog.length > 0) this.publishLog();
 

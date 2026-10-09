@@ -119,6 +119,7 @@ export const OP_SCHEMAS: Record<OpName, Schema> = {
   'remote:add': obj({ name: remoteName, fetchUrl: remoteUrl, pushUrl: either<string>(literal(''), remoteUrl) }),
   'remote:edit': obj({ name: remoteName, next: obj({ name: remoteName, fetchUrl: remoteUrl, pushUrl: either<string>(literal(''), remoteUrl) }) }),
   'remote:remove': obj({ name: remoteName }),
+  'remote:copyUrl': obj({ name: remoteName }),
   'stash:save': obj({ message: optional(str(4 * KB)), paths: optional(paths) }),
   'stash:apply': obj({ ref: rev }),
   'stash:pop': obj({ ref: optional(rev) }),

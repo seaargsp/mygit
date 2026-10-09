@@ -21,7 +21,8 @@ import {
   rebase, resetTo, revertCommit, skipOperation, type TodoEntry,
 } from '../git/history';
 import { stashApply, stashCreate, stashDrop, stashPop, stashRename, stashSave } from '../git/stash';
-import { annotateTag, createTag, deleteRemoteTag, deleteTag, fastForwardTag, pushTag, revParse } from '../git/refs';
+import { annotateTag, createTag, deleteRemoteTag, deleteTag, fastForwardTag, listRemotes, pushTag, revParse } from '../git/refs';
+import { redactUrl } from '../git/redact';
 import { headSha, runLfs, setSparseCheckout } from '../git/repoState';
 
 export type Host = {
@@ -867,7 +868,17 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
     }
     case 'remote:edit': {
       const { name, next } = message.payload;
-      await store.run(`Edit remote ${name}`, () => editRemote(repoPath, name, next));
+      await store.run(`Edit remote ${name}`, async () => {
+        const stored = (await listRemotes(repoPath)).find(entry => entry.name === name);
+        // The dialog shows redacted URLs: an unchanged field keeps the stored URL with its credentials.
+        const keep = (value: string, original: string | undefined) => (original && value === redactUrl(original) ? original : value);
+        await editRemote(repoPath, name, { ...next, fetchUrl: keep(next.fetchUrl, stored?.fetchUrl), pushUrl: keep(next.pushUrl, stored?.pushUrl) });
+      });
+      return;
+    }
+    case 'remote:copyUrl': {
+      const stored = (await listRemotes(repoPath)).find(entry => entry.name === message.payload.name);
+      if (stored) await vscode.env.clipboard.writeText(stored.fetchUrl);
       return;
     }
     case 'remote:remove': {

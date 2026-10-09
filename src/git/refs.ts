@@ -13,7 +13,13 @@ export type BranchRef = {
 };
 export type RemoteGroup = { remoteName: string; branches: BranchRef[] };
 export type TagRef = { name: string; sha: string; annotated: boolean; message?: string };
-export type RemoteInfo = { name: string; fetchUrl: string; pushUrl: string };
+export type RemoteInfo = {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string;
+  /** URLs shown without credentials. */
+  redacted?: boolean;
+};
 export type StashRef = {
   /** `stash@{N}` */
   ref: string;

@@ -465,7 +465,7 @@ export function remoteMenu(ctx: Ctx, name: string): MenuItem[] {
     item(`Remove ${name}`, () => ctx.ui.openDialog(confirmDialog(`Remove ${name}`, `The remote and its remote-tracking branches are removed from this repository. Undo restores them.`, 'Remove', () => send(ctx, 'remote:remove', { name }), true)), { danger: true }),
     sep,
     ...visibilityItems(ctx, [`remote:${name}`]),
-    ...(remote ? [item('Copy remote URL', () => send(ctx, 'clipboard:write', { text: remote.fetchUrl }))] : []),
+    ...(remote ? [item('Copy remote URL', () => send(ctx, 'remote:copyUrl', { name }))] : []),
   ];
 }
 

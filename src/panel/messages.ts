@@ -289,6 +289,7 @@ export type Ops = {
   'remote:add': { name: string; fetchUrl: string; pushUrl: string };
   'remote:edit': { name: string; next: { name: string; fetchUrl: string; pushUrl: string } };
   'remote:remove': { name: string };
+  'remote:copyUrl': { name: string };
   'stash:save': { message?: string; paths?: string[] };
   'stash:apply': { ref: string };
   'stash:pop': { ref?: string };

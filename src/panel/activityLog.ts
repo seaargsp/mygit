@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { LogEntry } from './messages';
+import { redactText } from '../git/redact';
 
 const MAX_ENTRIES = 500;
 
@@ -18,7 +19,8 @@ export class ActivityLog implements vscode.Disposable {
     return () => this.listeners.delete(listener);
   }
 
-  private push(list: LogEntry[], tab: string, entry: LogEntry): void {
+  private push(list: LogEntry[], tab: string, raw: LogEntry): void {
+    const entry = { ...raw, text: redactText(raw.text) };
     list.push(entry);
     if (list.length > MAX_ENTRIES) list.splice(0, list.length - MAX_ENTRIES);
     const stamp = new Date(entry.time).toISOString();

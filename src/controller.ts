@@ -10,6 +10,7 @@ import { fetch } from './git/remote';
 import { hasCommitGraph, writeCommitGraph } from './git/repoState';
 import { matchTargets, predictConflicts, type TargetConflicts } from './git/conflicts';
 import { isAncestor } from './git/history';
+import { redactText } from './git/redact';
 
 const WORKING_DEBOUNCE_MS = 300;
 const GIT_DEBOUNCE_MS = 150;
@@ -142,6 +143,7 @@ export class RepositoryController implements vscode.Disposable, Host {
   }
 
   private reportError(message: string): void {
+    message = redactText(message);
     const hook = /hook/i.test(message);
     void vscode.window.showErrorMessage(hook ? `Git hook failed. ${message}` : message, 'Show Activity Log').then(choice => {
       if (choice) this.post('activityLog');
