@@ -18,6 +18,8 @@ async function build() {
     bundle: true,
     outfile: 'webview-dist/index.js',
     platform: 'browser',
+    loader: { '.ttf': 'file' },
+    assetNames: '[name]',
     format: 'iife',
     sourcemap: true,
   });

@@ -283,3 +283,5 @@ To run from source, press F5 in VS Code to start an Extension Development Host, 
 ## License
 
 [MIT](LICENSE)
+
+Icons: [VS Code Codicons](https://github.com/microsoft/vscode-codicons), licensed CC-BY-4.0.

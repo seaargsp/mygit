@@ -514,12 +514,13 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@testing-library/preact": "^3.2.3",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/codicons": "^0.0.36",
     "esbuild": "^0.28.2",
-    "preact": "^10.19.0",
-    "@testing-library/preact": "^3.2.3",
     "jsdom": "^24.0.0",
+    "preact": "^10.19.0",
     "typescript": "^5.4.0",
     "vitest": "^5.0.3"
   }

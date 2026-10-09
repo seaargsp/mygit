@@ -120,7 +120,7 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
                       aria-label={`Set ${entry.label} as the default`}
                       onClick={() => send(ctx, 'remote:setDefaultPull', { mode: entry.mode })}
                     >
-                      <Icon name="star" size={12} filled={entry.mode === defaultPull.mode} />
+                      <Icon name={entry.mode === defaultPull.mode ? 'starFull' : 'star'} size={12} />
                     </button>
                   </div>
                 ))}

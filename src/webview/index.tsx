@@ -1,4 +1,5 @@
 import { render } from 'preact';
+import '@vscode/codicons/dist/codicon.css';
 import './styles.css';
 import { App } from './App';
 

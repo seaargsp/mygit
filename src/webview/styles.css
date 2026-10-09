@@ -401,7 +401,7 @@ select.field { padding: 0 4px; }
 .banner--warn { background: color-mix(in srgb, var(--warn) 16%, var(--surface-1)); }
 .banner--danger { background: color-mix(in srgb, var(--danger) 18%, var(--surface-1)); }
 .banner--solo { background: color-mix(in srgb, var(--solo) 18%, var(--surface-1)); }
-.banner--solo > svg { color: var(--solo); }
+.banner--solo > .icon { color: var(--solo); }
 .banner__text { flex: 1; min-width: 0; }
 .banner__actions { display: flex; gap: 6px; flex: none; }
 
