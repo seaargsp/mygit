@@ -18,6 +18,13 @@
   "extensionKind": [
     "workspace"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "mygit runs the repository's git configuration and hooks."
+    },
+    "virtualWorkspaces": false
+  },
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished",

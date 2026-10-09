@@ -24,6 +24,14 @@ export const workspace: {
   registerTextDocumentContentProvider: vi.fn(disposable),
 };
 export const extensions = { getExtension: vi.fn() };
-export const Uri = { file: (path: string) => ({ fsPath: path, toString: () => `file://${path}` }) };
+type MockUri = { fsPath: string; path: string; toString: () => string; with: (_change: unknown) => MockUri };
+const uri = (fsPath: string): MockUri => {
+  const self: MockUri = { fsPath, path: fsPath, toString: () => `file://${fsPath}`, with: () => self };
+  return self;
+};
+export const Uri = {
+  file: (path: string) => uri(path),
+  joinPath: (base: { fsPath: string }, ...parts: string[]) => uri([base.fsPath, ...parts].join('/')),
+};
 export const ViewColumn = { One: 1, Two: 2, Three: 3 };
 export const ExtensionMode = { Production: 1, Development: 2, Test: 3 };

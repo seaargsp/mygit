@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as vscode from 'vscode';
 
 export const LAUNCHER_VIEW_ID = 'mygit.launcher';
@@ -49,7 +50,7 @@ export class LauncherView implements vscode.WebviewViewProvider {
     if (!view) return;
     const { repoName, branch, changes } = this.info;
     view.badge = changes > 0 ? { value: changes, tooltip: `${changes} changed ${changes === 1 ? 'file' : 'files'}` } : undefined;
-    const nonce = Math.random().toString(36).slice(2);
+    const nonce = crypto.randomBytes(16).toString('base64');
     const escape = (text: string) => text.replace(/[&<>"]/g, char => `&#${char.charCodeAt(0)};`);
     const body = repoName
       ? `<p class="repo">${escape(repoName)}</p>
@@ -58,8 +59,8 @@ export class LauncherView implements vscode.WebviewViewProvider {
       : `<p class="meta">The open folder is not inside a Git repository. Open a folder that is, or run <code>git init</code> in a terminal.</p>`;
     view.webview.html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-<style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';" />
+<style nonce="${nonce}">
   body { padding: 8px 12px; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); }
   .repo { font-weight: 600; margin: 4px 0; }
   .meta { color: var(--vscode-descriptionForeground); margin: 4px 0 12px; line-height: 1.5; }

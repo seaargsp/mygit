@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as vscode from 'vscode';
 import type { ExtensionToWebviewMessage, WebviewAction, WebviewToExtensionMessage } from './messages';
 import { parseWebviewMessage } from './validate';
@@ -8,18 +9,25 @@ function getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
   return { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'webview-dist')] };
 }
 
-function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+export function getWebviewHtml(webview: Pick<vscode.Webview, 'cspSource' | 'asWebviewUri'>, extensionUri: vscode.Uri): string {
   // The version query defeats the webview resource cache after a rebuild.
   const version = Date.now().toString(36);
   const asset = (file: string) =>
     webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'webview-dist', file)).with({ query: `v=${version}` });
-  const nonce = Math.random().toString(36).slice(2);
+  const nonce = crypto.randomBytes(16).toString('base64');
+  const policy = [
+    "default-src 'none'",
+    `img-src ${webview.cspSource} https://www.gravatar.com data:`,
+    `font-src ${webview.cspSource}`,
+    `style-src ${webview.cspSource}`,
+    `script-src 'nonce-${nonce}'`,
+  ].join('; ');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https://www.gravatar.com data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta http-equiv="Content-Security-Policy" content="${policy};" />
   <link rel="stylesheet" href="${asset('index.css')}" />
   <title>mygit</title>
 </head>
