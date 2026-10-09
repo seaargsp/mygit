@@ -53,3 +53,19 @@ describe('remotes in state', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('remote:add fetch failure', () => {
+  it('shows the warning without credentials', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mygit-redact-add-'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+    const memento = { get: <T>(_key: string, fallback?: T) => fallback, update: vi.fn(), keys: () => [] };
+    const store = new Store({ repoPath: dir, gitDir: path.join(dir, '.git'), memento: memento as never, log: new ActivityLog(), reportError: vi.fn() });
+    const host = { store, post: vi.fn(), checkConflicts: vi.fn(), clearLog: vi.fn() };
+    vscodeMock.window.showWarningMessage.mockClear();
+    await handleMessage(host, { type: 'remote:add', payload: { name: 'up', fetchUrl: 'https://user:SECRET1@127.0.0.1:9/x.git?token=SECRET2', pushUrl: '' } });
+    const shown = vscodeMock.window.showWarningMessage.mock.calls.map(call => String(call[0])).join('\n');
+    expect(shown).toContain('fetching it failed');
+    expect(shown).not.toMatch(/SECRET/);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 20_000);
+});

@@ -22,7 +22,7 @@ import {
 } from '../git/history';
 import { stashApply, stashCreate, stashDrop, stashPop, stashRename, stashSave } from '../git/stash';
 import { annotateTag, createTag, deleteRemoteTag, deleteTag, fastForwardTag, listRemotes, pushTag, revParse } from '../git/refs';
-import { redactUrl } from '../git/redact';
+import { redactText, redactUrl } from '../git/redact';
 import { headSha, runLfs, setSparseCheckout } from '../git/repoState';
 
 export type Host = {
@@ -873,7 +873,7 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       const { name, fetchUrl, pushUrl } = message.payload;
       await store.run(`Add remote ${name}`, async () => {
         await addRemote(repoPath, name, fetchUrl, pushUrl || undefined);
-        await fetch(repoPath, { remote: name, prune: false }).catch(error => vscode.window.showWarningMessage(`Remote ${name} added; fetching it failed: ${error.message}`));
+        await fetch(repoPath, { remote: name, prune: false }).catch(error => vscode.window.showWarningMessage(`Remote ${name} added; fetching it failed: ${redactText(error.message)}`));
       });
       return;
     }
