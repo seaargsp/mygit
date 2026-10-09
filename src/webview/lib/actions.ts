@@ -421,6 +421,7 @@ export function localBranchMenu(ctx: Ctx, name: string, multi: string[] = []): M
     sep,
     item('Compare commit against working directory', () => send(ctx, 'graph:select', { shas: ['working-tree', branch.sha] })),
     item(`Show history of ${name}`, () => openHistory(ctx, { ...EMPTY_LOG_QUERY, refs: [name] })),
+    item(`Find merges of ${name} into…`, () => ctx.ui.openMergeFinder(name)),
     item('Copy branch name', () => send(ctx, 'clipboard:write', { text: name })),
   ];
 }
@@ -445,6 +446,7 @@ export function remoteBranchMenu(ctx: Ctx, remote: string, branch: string): Menu
     sep,
     ...visibilityItems(ctx, [`refs/remotes/${qualified}`]),
     item(`Show history of ${qualified}`, () => openHistory(ctx, { ...EMPTY_LOG_QUERY, refs: [qualified] })),
+    item(`Find merges of ${qualified} into…`, () => ctx.ui.openMergeFinder(qualified)),
     item('Copy branch name', () => send(ctx, 'clipboard:write', { text: qualified })),
   ];
 }

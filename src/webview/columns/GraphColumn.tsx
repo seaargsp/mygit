@@ -28,6 +28,8 @@ type Props = {
   setWipLabel: (label: string) => void;
   trace: TraceState | null;
   setTrace: (next: TraceState | null) => void;
+  /** Merge finder results marked in the graph. */
+  marks: Set<string> | null;
 };
 
 const OVERSCAN = 24;
@@ -92,7 +94,7 @@ function groupRefs(refs: ParsedRef[], showBranches: boolean, showTags: boolean):
   return [...groups.values()];
 }
 
-export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabel, setWipLabel, trace, setTrace }: Props) {
+export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabel, setWipLabel, trace, setTrace, marks }: Props) {
   const { state, dispatch } = ctx;
   const { commitLog, selection, workingTreeStatus, head, repoPrefs, prefs } = state;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -685,6 +687,7 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
               dropRow === commit.sha ? 'commit-row--drop' : '',
               commit.sha === head.sha ? 'commit-row--head' : '',
               trace?.origin === commit.sha ? 'commit-row--trace-origin' : '',
+              marks?.has(commit.sha) ? 'commit-row--mark' : '',
             ].filter(Boolean).join(' ');
             return (
               <div

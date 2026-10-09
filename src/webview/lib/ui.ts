@@ -20,6 +20,8 @@ export type Ui = {
   trace(sha: string, mode: TraceMode): void;
   /** Shows a commit in the graph, loading older history down to it when needed. */
   showCommit(sha: string): void;
+  /** Opens the merge finder for a local or remote branch. */
+  openMergeFinder(source: string): void;
 };
 
 export type Dispatch = (message: WebviewToExtensionMessage) => void;

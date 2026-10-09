@@ -1254,3 +1254,20 @@ mark.word--del { background: var(--diff-del-word); }
 .log-row__message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .log-row__author, .log-row__date { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
 .log-view__foot { display: flex; gap: 12px; padding: 4px 10px; border-top: 1px solid var(--line); font-size: 11px; color: var(--text-dim); }
+
+.commit-row--mark { box-shadow: inset 3px 0 0 var(--accent); }
+.mark-bar { border-bottom: 1px solid var(--line); }
+.mark-bar__label { color: var(--text); }
+.merge-finder__picker { display: grid; gap: 6px; margin-top: 10px; }
+.merge-finder__targets { max-height: 140px; overflow: auto; margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 2px; }
+.merge-finder__target { padding: 3px 8px; cursor: default; }
+.merge-finder__target:hover { background: var(--surface-hover); }
+.merge-finder__target--on { background: var(--surface-active); }
+.merge-finder__results { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 12px; }
+.merge-finder__results td { padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.merge-finder__results tr:hover td { background: var(--surface-hover); cursor: pointer; }
+.merge-finder__subject { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.merge-finder__sha { font-family: var(--vscode-editor-font-family, monospace); color: var(--text-faint); }
+.merge-finder__badge { padding: 0 5px; border-radius: 8px; font-size: 10px; background: var(--surface-2); }
+.merge-finder__badge--direct { color: var(--accent); }
+.merge-finder__count { text-align: right; color: var(--text-dim); }

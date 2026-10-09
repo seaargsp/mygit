@@ -17,6 +17,8 @@ import { HistoryView, BlameView } from './columns/HistoryViews';
 import { MergeTool } from './columns/MergeTool';
 import { RebaseView } from './columns/RebaseView';
 import { LogView } from './columns/LogView';
+import { MergeFinder } from './components/MergeFinder';
+import { MarkBar } from './components/MarkBar';
 import { CommitPanel } from './columns/CommitPanel';
 import { Icon } from './lib/icons';
 import { setIconTheme } from './components/FileIcon';
@@ -142,6 +144,9 @@ export function App() {
   const [searchIndex, setSearchIndex] = useState(0);
   const [wipLabel, setWipLabel] = useState('');
   const [trace, setTrace] = useState<TraceState | null>(null);
+  const [finder, setFinder] = useState<string | null>(null);
+  const [marks, setMarks] = useState<{ label: string; shas: string[]; index: number } | null>(null);
+  const markSet = useMemo(() => (marks ? new Set(marks.shas) : null), [marks]);
   const traceRef = useRef(trace);
   traceRef.current = trace;
   const searchRef = useRef<HTMLInputElement>(null);
@@ -194,6 +199,9 @@ export function App() {
       else dispatch({ type: 'graph:reveal', payload: { sha } });
       setReveal({ sha, nonce: Date.now() });
     },
+    openMergeFinder(source: string) {
+      setFinder(source);
+    },
     trace(sha, mode) {
       setTrace({ origin: sha, mode });
       dispatch({ type: 'graph:select', payload: { shas: [sha] } });
@@ -242,6 +250,13 @@ export function App() {
     // A match below the loaded rows extends the graph down to it first.
     if (loadedShas.has(sha)) dispatch({ type: 'graph:select', payload: { shas: [sha] } });
     else dispatch({ type: 'graph:reveal', payload: { sha } });
+  }
+
+  function stepMarks(delta: 1 | -1): void {
+    if (!marks || marks.shas.length === 0) return;
+    const index = (marks.index + delta + marks.shas.length) % marks.shas.length;
+    setMarks({ ...marks, index });
+    ui.showCommit(marks.shas[index]);
   }
 
   // ------------------------------------------------------------ extension actions and shortcuts
@@ -302,7 +317,7 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (menu || dialog) return;
+      if (menu || dialog || finder) return;
       const typing = isTyping(event.target);
       if (event.key === 'Escape') {
         if (inline) setInline(null);
@@ -328,7 +343,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [menu, dialog, inline, logOpen]);
+  }, [menu, dialog, inline, logOpen, finder]);
 
   // ------------------------------------------------------------ layout
 
@@ -381,6 +396,7 @@ export function App() {
           setWipLabel={setWipLabel}
           trace={trace}
           setTrace={setTrace}
+          marks={markSet}
         />
       );
   }
@@ -416,6 +432,9 @@ export function App() {
 
         <div class="pane pane--graph">
           <Banners ctx={ctx} />
+          {marks && state.view.kind === 'graph' && (
+            <MarkBar label={marks.label} count={marks.shas.length} index={marks.index} onStep={stepMarks} onClose={() => setMarks(null)} />
+          )}
           {centre}
         </div>
 
@@ -457,6 +476,17 @@ export function App() {
 
       {menu && <ContextMenu request={menu} onClose={() => setMenu(null)} />}
       {dialog && <Dialog request={dialog} onClose={() => setDialog(null)} />}
+      {finder && (
+        <MergeFinder
+          ctx={ctx}
+          source={finder}
+          onClose={() => setFinder(null)}
+          onMark={(label, shas) => {
+            setMarks({ label, shas, index: 0 });
+            if (shas[0]) ui.showCommit(shas[0]);
+          }}
+        />
+      )}
     </div>
   );
 }
