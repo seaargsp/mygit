@@ -127,4 +127,6 @@ export const refName = guarded('a reference name', keep(isSafeRefName));
 export const remoteName = guarded('a remote name', keep(isSafeRemoteName));
 export const remoteUrl = guarded('a remote URL', keep(isSafeRemoteUrl), 8192);
 export const relPath = guarded('a repository path', normalizeRelPath, 4096);
+/** A repository path kept as typed (a git pathspec such as `src/`), checked like `relPath`. */
+export const pathspec = guarded('a repository path', value => (normalizeRelPath(value) === null ? null : value), 4096);
 export const isoDate = guarded('a YYYY-MM-DD date or nothing', keep(value => value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value)), 10);

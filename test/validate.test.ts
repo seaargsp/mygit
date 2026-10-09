@@ -50,3 +50,11 @@ describe('rejection reasons', () => {
     expect(parseWebviewMessage({ type: 'graph:select', payload: { shas } })?.type).toBe('graph:select');
   });
 });
+
+describe('view:log path', () => {
+  it('is validated without being rewritten, so the History field keeps what was typed', () => {
+    const query = { refs: [], author: '', message: '', since: '', until: '', path: 'src/', compare: null };
+    expect(parseWebviewMessage({ type: 'view:log', payload: { query } })).toEqual({ type: 'view:log', payload: { query } });
+    expect(parseWebviewMessage({ type: 'view:log', payload: { query: { ...query, path: '../x' } } })).toBeNull();
+  });
+});

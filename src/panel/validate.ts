@@ -1,7 +1,7 @@
 import type { OpName, WebviewToExtensionMessage } from './messages';
 import {
   SchemaError, arr, bool, dict, either, int, isoDate, literal, nullable, obj, oneOf, optional, refName, relPath, remoteName,
-  remoteUrl, rev, sha, str, type Schema,
+  pathspec, remoteUrl, rev, sha, str, type Schema,
 } from './schema';
 
 const NONE = obj({});
@@ -30,7 +30,7 @@ const logQuery = obj({
   message: str(200),
   since: isoDate,
   until: isoDate,
-  path: either<string>(literal(''), relPath),
+  path: either<string>(literal(''), pathspec),
   compare: nullable(obj({ left: rev, right: rev })),
 });
 
