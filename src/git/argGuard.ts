@@ -55,6 +55,10 @@ export function normalizeRelPath(value: string): string | null {
     parts.push(part);
   }
   if (parts.length === 0 || parts[0].toLowerCase() === '.git') return null;
+  // Windows treats `\` as a separator: `..` or a leading `.git` between backslashes escapes or
+  // reaches the git directory there. Elsewhere a backslash is part of the name and is kept.
+  const segments = parts.join('/').split(/[\\/]/);
+  if (segments.includes('..') || segments[0].toLowerCase() === '.git') return null;
   return parts.join('/');
 }
 

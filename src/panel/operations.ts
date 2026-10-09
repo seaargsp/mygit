@@ -440,7 +440,7 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(path.join(repoPath, message.payload.path)));
       return;
     case 'file:create': {
-      const filePath = message.payload.path.replace(/\\/g, '/').replace(/^\/+/, '');
+      const filePath = message.payload.path;
       await store.run(`Create ${filePath}`, async () => {
         const absolute = await createFile(repoPath, filePath);
         await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(absolute));

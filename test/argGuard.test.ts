@@ -57,3 +57,12 @@ describe('assertRev', () => {
     expect(assertRev('branch', 'main')).toBe('main');
   });
 });
+
+describe('normalizeRelPath with backslashes', () => {
+  it.each(['..\\..\\evil.txt', 'a\\..\\..\\x', '.git\\hooks\\pre-commit', '.GIT\\config', 'src\\..\\..\\x'])('rejects traversal %j', value => {
+    expect(normalizeRelPath(value)).toBeNull();
+  });
+  it('keeps a backslash that is part of a file name', () => {
+    expect(normalizeRelPath('dir\\file.txt')).toBe('dir\\file.txt');
+  });
+});
