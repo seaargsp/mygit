@@ -49,11 +49,17 @@ export async function findMerges(repoPath: string, source: string, target: strin
   const results: MergeResult[] = [];
   const fastForward = async (sha: string): Promise<MergeResult> => ({ sha, ...(await meta(sha)), kind: 'fast-forward', via: null, count: null });
 
+  // Commits added after the last merge are not in the target: the search starts at the newest
+  // source commit the target contains.
   let x = tipA;
+  if (!(await isAncestor(tipA, tipB))) {
+    x = await git(['merge-base', END, tipA, tipB]).catch(() => '');
+    if (!x) return { results, unmerged, truncated: false };
+  }
   for (let round = 0; round < MAX_ROUNDS; round += 1) {
     if (signal?.aborted) throw new Error('Cancelled');
     if (x === tipB) {
-      if (results.length === 0) results.push(await fastForward(x));
+      if (results.length === 0 && x === tipA) results.push(await fastForward(x));
       return { results, unmerged, truncated: false };
     }
     // Combined with --first-parent, --ancestry-path follows first-parent edges only and misses a
@@ -70,7 +76,7 @@ export async function findMerges(repoPath: string, source: string, target: strin
     if (parents[0] === x) {
       // x lies on the target's first-parent line: a fast-forward when x is the source tip,
       // otherwise the fork point (or an earlier fast-forward, which ancestry cannot tell apart).
-      if (results.length === 0) results.push(await fastForward(x));
+      if (results.length === 0 && x === tipA) results.push(await fastForward(x));
       return { results, unmerged, truncated: false };
     }
     let merged: string | undefined;

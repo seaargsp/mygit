@@ -66,6 +66,19 @@ describe('findMerges', () => {
     expect(truncated).toBe(false);
   });
 
+  it('finds the merges of a branch that has commits after its last merge', async () => {
+    git('branch', 'feat-more', 'feat');
+    git('checkout', '-q', 'feat-more');
+    commit('f4');
+    git('checkout', '-q', 'main');
+    const { results, unmerged } = await findMerges(dir, 'feat-more', 'main');
+    expect(results.map(entry => [entry.subject, entry.kind])).toEqual([
+      ["Merge branch 'feat' again", 'direct'],
+      ["Merge branch 'feat'", 'direct'],
+    ]);
+    expect(unmerged).toBe(1);
+  });
+
   it('accepts a remote-tracking source', async () => {
     expect((await findMerges(dir, 'origin/feat', 'main')).results).toHaveLength(2);
   });
