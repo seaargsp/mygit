@@ -1,4 +1,5 @@
 import { runGit } from './gitService';
+import { assertRev } from './argGuard';
 import { parseNameStatus } from './diff';
 import type { FileChange } from './status';
 
@@ -11,15 +12,15 @@ export async function stashSave(repoPath: string, opts: { message?: string; path
 }
 
 export async function stashApply(repoPath: string, ref: string): Promise<void> {
-  await runGit(repoPath, ['stash', 'apply', ref]);
+  await runGit(repoPath, ['stash', 'apply', assertRev('stash', ref)]);
 }
 
 export async function stashPop(repoPath: string, ref?: string): Promise<void> {
-  await runGit(repoPath, ref ? ['stash', 'pop', ref] : ['stash', 'pop']);
+  await runGit(repoPath, ref ? ['stash', 'pop', assertRev('stash', ref)] : ['stash', 'pop']);
 }
 
 export async function stashDrop(repoPath: string, ref: string): Promise<void> {
-  await runGit(repoPath, ['stash', 'drop', ref]);
+  await runGit(repoPath, ['stash', 'drop', assertRev('stash', ref)]);
 }
 
 /**
@@ -27,8 +28,8 @@ export async function stashDrop(repoPath: string, ref: string): Promise<void> {
  * The entry moves to the top of the stash list.
  */
 export async function stashRename(repoPath: string, ref: string, sha: string, message: string): Promise<void> {
-  await runGit(repoPath, ['stash', 'drop', ref]);
-  await runGit(repoPath, ['stash', 'store', '-m', message, sha]);
+  await runGit(repoPath, ['stash', 'drop', assertRev('stash', ref)]);
+  await runGit(repoPath, ['stash', 'store', '-m', message, assertRev('commit', sha)]);
 }
 
 /** Tracked changes against the base commit plus untracked files kept in the stash's third parent. */

@@ -1,4 +1,5 @@
-import { runGit } from './gitService';
+import { runGit, END_OF_OPTIONS as END } from './gitService';
+import { assertRefName, assertRemoteName, assertRev, isSafeRev } from './argGuard';
 
 export type BranchRef = {
   name: string;
@@ -139,36 +140,42 @@ function stashMessage(subject: string): string {
 }
 
 export async function createTag(repoPath: string, name: string, ref: string, message?: string): Promise<void> {
-  if (message) await runGit(repoPath, ['tag', '-a', name, ref, '-m', message]);
-  else await runGit(repoPath, ['tag', name, ref]);
+  assertRefName('tag name', name);
+  assertRev('commit', ref);
+  if (message) await runGit(repoPath, ['tag', '-a', '-m', message, END, name, ref]);
+  else await runGit(repoPath, ['tag', END, name, ref]);
 }
 
 export async function deleteTag(repoPath: string, name: string): Promise<void> {
-  await runGit(repoPath, ['tag', '-d', name]);
+  await runGit(repoPath, ['tag', '-d', END, assertRefName('tag', name)]);
 }
 
 /** Converts a lightweight tag to an annotated one on the same commit. */
 export async function annotateTag(repoPath: string, name: string, message: string): Promise<void> {
-  await runGit(repoPath, ['tag', '-a', '-f', name, `${name}^{commit}`, '-m', message]);
+  assertRefName('tag', name);
+  await runGit(repoPath, ['tag', '-a', '-f', '-m', message, END, name, `${name}^{commit}`]);
 }
 
 /** Moves a tag to HEAD, keeping its annotation. Refused unless the move is a fast-forward. */
 export async function fastForwardTag(repoPath: string, tag: TagRef): Promise<void> {
-  await runGit(repoPath, ['merge-base', '--is-ancestor', tag.sha, 'HEAD']);
-  if (tag.annotated) await runGit(repoPath, ['tag', '-a', '-f', tag.name, 'HEAD', '-m', tag.message ?? tag.name]);
-  else await runGit(repoPath, ['tag', '-f', tag.name, 'HEAD']);
+  assertRefName('tag', tag.name);
+  await runGit(repoPath, ['merge-base', '--is-ancestor', END, tag.sha, 'HEAD']);
+  if (tag.annotated) await runGit(repoPath, ['tag', '-a', '-f', '-m', tag.message ?? tag.name, END, tag.name, 'HEAD']);
+  else await runGit(repoPath, ['tag', '-f', END, tag.name, 'HEAD']);
 }
 
 export async function pushTag(repoPath: string, name: string, remote: string): Promise<void> {
-  await runGit(repoPath, ['push', remote, `refs/tags/${name}`]);
+  await runGit(repoPath, ['push', END, assertRemoteName('remote', remote), `refs/tags/${assertRefName('tag', name)}`]);
 }
 
 export async function deleteRemoteTag(repoPath: string, name: string, remote: string): Promise<void> {
-  await runGit(repoPath, ['push', remote, '--delete', `refs/tags/${name}`]);
+  await runGit(repoPath, ['push', '--delete', END, assertRemoteName('remote', remote), `refs/tags/${assertRefName('tag', name)}`]);
 }
 
 /** Every ref name and the commit it points at, for undo snapshots and visibility. */
 export async function revParse(repoPath: string, rev: string): Promise<string | undefined> {
+  // rev-parse accepts --end-of-options only from git 2.43: the guard keeps options out.
+  if (!isSafeRev(rev)) return undefined;
   try {
     return (await runGit(repoPath, ['rev-parse', '--verify', '-q', `${rev}^{commit}`])).trim() || undefined;
   } catch {

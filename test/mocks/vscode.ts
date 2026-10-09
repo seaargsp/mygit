@@ -8,6 +8,7 @@ export const commands = {
 };
 export const window = {
   showInformationMessage: vi.fn(),
+  showErrorMessage: vi.fn(() => Promise.resolve(undefined)),
   createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), append: vi.fn(), show: vi.fn(), clear: vi.fn(), dispose: vi.fn() })),
   registerWebviewPanelSerializer: vi.fn(disposable),
   registerWebviewViewProvider: vi.fn(disposable),

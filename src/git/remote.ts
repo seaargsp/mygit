@@ -1,12 +1,14 @@
-import { runGit, GitError, NON_INTERACTIVE_ENV } from './gitService';
+import { runGit, GitError, NON_INTERACTIVE_ENV, END_OF_OPTIONS as END } from './gitService';
+import { assertRefName, assertRemoteName, assertRemoteUrl, assertRev } from './argGuard';
 
+// checkout and reset reject --end-of-options (git 2.43): the guards keep options out of their arguments.
 export async function checkoutBranch(repoPath: string, ref: string): Promise<void> {
-  await runGit(repoPath, ['checkout', ref]);
+  await runGit(repoPath, ['checkout', assertRev('branch', ref)]);
 }
 
 /** Checks out a commit without a branch. */
 export async function checkoutDetached(repoPath: string, rev: string): Promise<void> {
-  await runGit(repoPath, ['checkout', '--detach', rev]);
+  await runGit(repoPath, ['checkout', '--detach', assertRev('revision', rev)]);
 }
 
 /**
@@ -14,20 +16,25 @@ export async function checkoutDetached(repoPath: string, rev: string): Promise<v
  * local branch tracking the remote one.
  */
 export async function checkoutRemoteBranch(repoPath: string, remote: string, branch: string, localExists: boolean): Promise<void> {
+  assertRemoteName('remote', remote);
+  assertRefName('branch', branch);
   if (localExists) await runGit(repoPath, ['checkout', branch]);
   else await runGit(repoPath, ['checkout', '-b', branch, '--track', `${remote}/${branch}`]);
 }
 
 export async function createBranch(repoPath: string, name: string, from: string, checkout: boolean): Promise<void> {
+  assertRefName('branch name', name);
+  assertRev('start point', from);
   if (checkout) await runGit(repoPath, ['checkout', '-b', name, from]);
-  else await runGit(repoPath, ['branch', name, from]);
+  else await runGit(repoPath, ['branch', END, name, from]);
 }
 
 export async function renameBranch(repoPath: string, from: string, to: string): Promise<void> {
-  await runGit(repoPath, ['branch', '-m', from, to]);
+  await runGit(repoPath, ['branch', '-m', END, assertRefName('branch', from), assertRefName('branch name', to)]);
 }
 
 export async function isValidBranchName(repoPath: string, name: string): Promise<boolean> {
+  if (name.startsWith('-')) return false;
   try {
     await runGit(repoPath, ['check-ref-format', '--branch', name]);
     return true;
@@ -45,7 +52,7 @@ export class UnmergedBranchError extends Error {
 /** Safe delete; an unmerged branch raises UnmergedBranchError unless `force`. */
 export async function deleteLocalBranch(repoPath: string, name: string, force: boolean): Promise<void> {
   try {
-    await runGit(repoPath, ['branch', force ? '-D' : '-d', name]);
+    await runGit(repoPath, ['branch', force ? '-D' : '-d', END, assertRefName('branch', name)]);
   } catch (error) {
     if (!force && error instanceof GitError && /not fully merged/.test(error.stderr)) throw new UnmergedBranchError(name);
     throw error;
@@ -53,11 +60,11 @@ export async function deleteLocalBranch(repoPath: string, name: string, force: b
 }
 
 export async function deleteRemoteBranch(repoPath: string, remote: string, branch: string): Promise<void> {
-  await runGit(repoPath, ['push', remote, '--delete', branch]);
+  await runGit(repoPath, ['push', '--delete', END, assertRemoteName('remote', remote), assertRefName('branch', branch)]);
 }
 
 export async function setUpstream(repoPath: string, branch: string, upstream: string): Promise<void> {
-  await runGit(repoPath, ['branch', `--set-upstream-to=${upstream}`, branch]);
+  await runGit(repoPath, ['branch', `--set-upstream-to=${assertRev('upstream', upstream)}`, END, assertRefName('branch', branch)]);
 }
 
 /**
@@ -66,8 +73,10 @@ export async function setUpstream(repoPath: string, branch: string, upstream: st
  * non-fast-forward updates by itself.
  */
 export async function fastForwardBranch(repoPath: string, branch: string, target: string, isHead: boolean): Promise<void> {
-  if (isHead) await runGit(repoPath, ['merge', '--ff-only', target]);
-  else await runGit(repoPath, ['fetch', '.', `${target}:refs/heads/${branch}`]);
+  assertRefName('branch', branch);
+  assertRev('target', target);
+  if (isHead) await runGit(repoPath, ['merge', '--ff-only', END, target]);
+  else await runGit(repoPath, ['fetch', END, '.', `${target}:refs/heads/${branch}`]);
 }
 
 /**
@@ -75,12 +84,13 @@ export async function fastForwardBranch(repoPath: string, branch: string, target
  * which git applies only as a fast-forward. The remote-tracking ref is updated as well.
  */
 export async function pullBranch(repoPath: string, branch: string): Promise<void> {
+  assertRefName('branch', branch);
   const config = async (key: string) => (await runGit(repoPath, ['config', '--get', key]).catch(() => '')).trim();
   const remote = await config(`branch.${branch}.remote`);
   const merge = await config(`branch.${branch}.merge`);
   if (!remote || !merge) throw new Error(`${branch} has no upstream to pull from. Set one with "Set Upstream".`);
   try {
-    await runGit(repoPath, ['fetch', remote, `${merge}:refs/heads/${branch}`]);
+    await runGit(repoPath, ['fetch', END, remote, `${merge}:refs/heads/${branch}`]);
   } catch (error) {
     if (error instanceof GitError && /non-fast-forward|rejected/.test(error.stderr)) {
       throw new Error(`${branch} has diverged from its upstream, so it cannot be fast-forwarded. Check it out and pull to merge or rebase.`);
@@ -91,7 +101,7 @@ export async function pullBranch(repoPath: string, branch: string): Promise<void
 
 /** Points a branch that is not checked out at another commit. */
 export async function moveBranch(repoPath: string, branch: string, sha: string): Promise<void> {
-  await runGit(repoPath, ['branch', '-f', branch, sha]);
+  await runGit(repoPath, ['branch', '-f', END, assertRefName('branch', branch), assertRev('commit', sha)]);
 }
 
 /** Upper bound for an automatic fetch: a stalled network or remote must not hold the fetch slot. */
@@ -103,8 +113,9 @@ export async function fetch(
 ): Promise<void> {
   // fetch.writeCommitGraph extends the commit-graph with the fetched commits.
   const args = opts.writeCommitGraph ? ['-c', 'fetch.writeCommitGraph=true', 'fetch'] : ['fetch'];
-  args.push(opts.remote ?? '--all');
   if (opts.prune) args.push('--prune');
+  if (opts.remote) args.push(END, assertRemoteName('remote', opts.remote));
+  else args.push('--all');
   // A background fetch has no user to answer a credential prompt: it fails instead of waiting.
   await runGit(repoPath, args, opts.background ? { env: NON_INTERACTIVE_ENV, timeoutMs: BACKGROUND_FETCH_TIMEOUT_MS } : {});
 }
@@ -139,8 +150,12 @@ export async function push(
   if (opts.setUpstream) args.push('--set-upstream');
   if (opts.force) args.push('--force-with-lease');
   if (opts.remote) {
-    args.push(opts.remote);
-    if (opts.branch) args.push(`refs/heads/${opts.branch}:refs/heads/${opts.remoteBranch ?? opts.branch}`);
+    args.push(END, assertRemoteName('remote', opts.remote));
+    if (opts.branch) {
+      assertRefName('branch', opts.branch);
+      assertRefName('remote branch', opts.remoteBranch ?? opts.branch);
+      args.push(`refs/heads/${opts.branch}:refs/heads/${opts.remoteBranch ?? opts.branch}`);
+    }
   }
   try {
     await runGit(repoPath, args);
@@ -153,14 +168,17 @@ export async function push(
 }
 
 export async function addRemote(repoPath: string, name: string, fetchUrl: string, pushUrl?: string): Promise<void> {
-  await runGit(repoPath, ['remote', 'add', name, fetchUrl]);
-  if (pushUrl && pushUrl !== fetchUrl) await runGit(repoPath, ['remote', 'set-url', '--push', name, pushUrl]);
+  assertRemoteName('remote name', name);
+  await runGit(repoPath, ['remote', 'add', END, name, assertRemoteUrl('fetch URL', fetchUrl)]);
+  if (pushUrl && pushUrl !== fetchUrl) await runGit(repoPath, ['remote', 'set-url', '--push', END, name, assertRemoteUrl('push URL', pushUrl)]);
 }
 
 export async function editRemote(repoPath: string, name: string, next: { name: string; fetchUrl: string; pushUrl: string }): Promise<void> {
-  if (next.name !== name) await runGit(repoPath, ['remote', 'rename', name, next.name]);
-  await runGit(repoPath, ['remote', 'set-url', next.name, next.fetchUrl]);
-  if (next.pushUrl && next.pushUrl !== next.fetchUrl) await runGit(repoPath, ['remote', 'set-url', '--push', next.name, next.pushUrl]);
+  assertRemoteName('remote', name);
+  assertRemoteName('remote name', next.name);
+  if (next.name !== name) await runGit(repoPath, ['remote', 'rename', END, name, next.name]);
+  await runGit(repoPath, ['remote', 'set-url', END, next.name, assertRemoteUrl('fetch URL', next.fetchUrl)]);
+  if (next.pushUrl && next.pushUrl !== next.fetchUrl) await runGit(repoPath, ['remote', 'set-url', '--push', END, next.name, assertRemoteUrl('push URL', next.pushUrl)]);
   else await runGit(repoPath, ['config', '--unset-all', `remote.${next.name}.pushurl`]).catch(() => undefined);
 }
 
@@ -172,6 +190,7 @@ export type RemoteSnapshot = {
 
 /** Configuration and remote-tracking refs of a remote, enough to recreate it after removal. */
 export async function snapshotRemote(repoPath: string, name: string): Promise<RemoteSnapshot> {
+  assertRemoteName('remote', name);
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const config = (await runGit(repoPath, ['config', '--local', '--get-regexp', `^remote\\.${escaped}\\.`]).catch(() => ''))
     .split('\n')
@@ -188,7 +207,7 @@ export async function snapshotRemote(repoPath: string, name: string): Promise<Re
 }
 
 export async function removeRemote(repoPath: string, name: string): Promise<void> {
-  await runGit(repoPath, ['remote', 'remove', name]);
+  await runGit(repoPath, ['remote', 'remove', END, assertRemoteName('remote', name)]);
 }
 
 export async function restoreRemote(repoPath: string, snapshot: RemoteSnapshot): Promise<void> {

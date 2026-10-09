@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import * as os from 'node:os';
 
 export class GitError extends Error {
   constructor(message: string, public readonly stderr: string, public readonly args: string[], public readonly code: number | null) {
@@ -143,4 +144,29 @@ export async function resolveRepoRoot(folder: string): Promise<string | undefine
 /** Single-quoted for the POSIX shell git uses to run editor commands, Git for Windows included. */
 export function shellQuote(value: string): string {
   return `'${value.replace(/\\/g, '/').replace(/'/g, `'\\''`)}'`;
+}
+
+/** Ends option parsing: every later argument is a revision or name (git 2.24+). */
+export const END_OF_OPTIONS = '--end-of-options';
+
+export const MIN_GIT: [number, number, number] = [2, 24, 0];
+
+export function parseGitVersion(output: string): [number, number, number] | null {
+  const match = /git version (\d+)\.(\d+)(?:\.(\d+))?/.exec(output);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)] : null;
+}
+
+export function versionAtLeast(version: [number, number, number], min: [number, number, number]): boolean {
+  for (let i = 0; i < 3; i += 1) {
+    if (version[i] !== min[i]) return version[i] > min[i];
+  }
+  return true;
+}
+
+export async function gitVersion(): Promise<[number, number, number] | null> {
+  try {
+    return parseGitVersion(await runGit(os.homedir(), ['version']));
+  } catch {
+    return null;
+  }
 }

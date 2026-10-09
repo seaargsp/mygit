@@ -6,7 +6,7 @@ import { RevisionContentProvider, REVISION_SCHEME } from './panel/revisionConten
 import { RepositoryController } from './controller';
 import { registerCommands } from './commands';
 import { isSourceCheckout, watchBuildOutput } from './devReload';
-import { resolveRepoRoot, setGitBinaryPath, setGitTimeout } from './git/gitService';
+import { MIN_GIT, gitVersion, resolveRepoRoot, setGitBinaryPath, setGitTimeout, versionAtLeast } from './git/gitService';
 import { getGitDir } from './git/repoState';
 
 let controller: RepositoryController | undefined;
@@ -60,6 +60,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Panels restored before the repository resolves draw their shell (and the last snapshot) at
   // once and attach when it resolves.
   const ready = (async () => {
+    const version = await gitVersion();
+    if (version && !versionAtLeast(version, MIN_GIT)) {
+      const text = `mygit needs Git ${MIN_GIT.join('.')} or later; found ${version.join('.')}.`;
+      log.application(text, 'error');
+      void vscode.window.showErrorMessage(text);
+      launcher.update({ repoName: null, branch: null, changes: 0 });
+      return;
+    }
     const repoPath = await findRepository();
     if (!repoPath) {
       log.application('No Git repository in the workspace');
