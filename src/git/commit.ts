@@ -39,7 +39,7 @@ export async function getCommitDetail(repoPath: string, sha: string): Promise<Co
   const body = message.join('\x1f').trim();
 
   // Root commits have no parent to diff against; --root diffs them against the empty tree.
-  const nameStatus = await runGit(repoPath, ['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '-M', '--root', '-m', '--first-parent', sha]);
+  const nameStatus = await runGit(repoPath, ['diff-tree', '--no-commit-id', '--name-status', '-r', '-z', '-M', '--root', '--diff-merges=first-parent', sha]);
 
   return {
     sha: full,
