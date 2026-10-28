@@ -799,7 +799,7 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
         else set.delete(id);
       }
       store.setRepoPrefs({ solo: [...set] });
-      store.publishLog();
+      await store.refreshGraph();
       return;
     }
     case 'graph:smartVisibility':
@@ -814,6 +814,9 @@ export async function handleMessage(host: Host, message: WebviewToExtensionMessa
       return;
     case 'prefs:collapsed':
       store.setRepoPrefs({ collapsed: message.payload.collapsed });
+      return;
+    case 'prefs:fileView':
+      store.setRepoPrefs({ fileView: message.payload.mode });
       return;
 
     // ------------------------------------------------------------ tags

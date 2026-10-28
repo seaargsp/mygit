@@ -121,6 +121,7 @@ export const OP_SCHEMAS: Record<OpName, Schema> = {
   'prefs:columns': obj({ columns: obj({ order: arr(columnId, 6), hidden: arr(columnId, 6), widths: dict(['refs', 'graph', 'message', 'author', 'date', 'sha'], int(0, 10_000)) }) }),
   'prefs:sections': obj({ hidden: arr(oneOf(['local', 'remote', 'tags', 'stashes']), 4) }),
   'prefs:collapsed': obj({ collapsed: arr(str(2048)) }),
+  'prefs:fileView': obj({ mode: oneOf(['path', 'tree']) }),
   'tag:create': obj({ name: refName, ref: rev, message: optional(str(MB)) }),
   'tag:delete': obj({ name: refName }),
   'tag:deleteRemote': obj({ name: refName, remote: remoteName }),

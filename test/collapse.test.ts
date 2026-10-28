@@ -29,3 +29,21 @@ describe('prefs:collapsed', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('prefs:fileView', () => {
+  it('stores the Path / Tree mode in the repository prefs', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mygit-fileview-'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+    const update = vi.fn();
+    const memento = { get: <T>(_key: string, fallback?: T) => fallback, update, keys: () => [] };
+    const store = new Store({ repoPath: dir, gitDir: path.join(dir, '.git'), memento: memento as never, log: new ActivityLog(), reportError: vi.fn() });
+    const host = { store, post: vi.fn(), checkConflicts: vi.fn(), clearLog: vi.fn() };
+
+    expect(store.getState().repoPrefs.fileView).toBe('path');
+    await handleMessage(host, { type: 'prefs:fileView', payload: { mode: 'tree' } });
+
+    expect(store.getState().repoPrefs.fileView).toBe('tree');
+    expect(update).toHaveBeenCalledWith('mygit.repoPrefs', expect.objectContaining({ fileView: 'tree' }));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

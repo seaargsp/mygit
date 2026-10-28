@@ -1,12 +1,11 @@
 import type { ComponentChildren } from 'preact';
 import { useMemo, useRef, useState } from 'preact/hooks';
 import type { FileChange } from '../../git/status';
+import type { FileViewMode } from '../../panel/messages';
 import { Icon } from '../lib/icons';
 import { FileIcon, FolderIcon } from './FileIcon';
 import { splitPath } from '../lib/format';
 import { isTyping, primary } from '../lib/events';
-
-export type FileViewMode = 'path' | 'tree';
 
 type Props<T extends FileChange> = {
   files: T[];

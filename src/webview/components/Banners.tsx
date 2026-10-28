@@ -52,7 +52,7 @@ export function Banners({ ctx }: { ctx: Ctx }) {
         <div class="banner banner--solo" role="status" data-testid="solo-banner">
           <Icon name="solo" />
           <span class="banner__text">
-            <strong>Solo</strong> · {state.repoPrefs.solo.map(soloLabel).join(', ')} · commits of other references are dimmed
+            <strong>Solo</strong> · {state.repoPrefs.solo.map(soloLabel).join(', ')} · commits of other references are hidden
           </span>
           <span class="banner__actions">
             <button class="btn btn--small" onClick={() => send(ctx, 'refs:solo', { ids: state.repoPrefs.solo, solo: false })}>Exit solo</button>

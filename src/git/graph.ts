@@ -169,8 +169,6 @@ export type LaneCommit = CommitNode & {
   lane: number;
   /** Lane each parent edge travels down; it bends into the parent's own lane at the parent row. */
   parentLanes: number[];
-  /** Outside the soloed references: drawn dimmed. */
-  muted?: boolean;
 };
 
 /**

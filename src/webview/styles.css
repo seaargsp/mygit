@@ -586,7 +586,6 @@ select.field { padding: 0 4px; }
   border-left-color: var(--accent);
 }
 .commit-row--dim .commit-row__message, .commit-row--dim .commit-row__author, .commit-row--dim .commit-row__date, .commit-row--dim .commit-row__sha { opacity: 0.35; }
-.commit-row--muted .commit-row__refs { opacity: 0.35; }
 .commit-row--match { box-shadow: inset 0 0 0 1px var(--warn); }
 .commit-row--drop { box-shadow: inset 0 0 0 1px var(--accent); background: var(--surface-active); }
 .commit-row--stash .commit-row__subject { font-style: italic; color: var(--text-dim); }

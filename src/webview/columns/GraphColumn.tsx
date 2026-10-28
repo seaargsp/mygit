@@ -142,7 +142,6 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
   const isDim = (sha: string): boolean => {
     const row = rowIndex.get(sha);
     const commit = row === undefined ? undefined : commitLog[row - rowOffset];
-    if (commit?.muted) return true;
     if (search.active && !search.matches.has(sha)) return true;
     if (traced && !traced.has(sha)) return true;
     if (branchSet && !branchSet.has(sha)) return true;
@@ -682,7 +681,6 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
               'commit-row',
               commit.stash ? 'commit-row--stash' : '',
               isDim(commit.sha) ? 'commit-row--dim' : '',
-              commit.muted ? 'commit-row--muted' : '',
               search.current === commit.sha ? 'commit-row--match' : '',
               dropRow === commit.sha ? 'commit-row--drop' : '',
               commit.sha === head.sha ? 'commit-row--head' : '',

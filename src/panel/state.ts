@@ -339,8 +339,8 @@ export class Store {
   }
 
   private unfilteredGraph(): boolean {
-    const { hidden, smartVisibility } = this.state.repoPrefs;
-    return hidden.length === 0 && !smartVisibility;
+    const { hidden, solo, smartVisibility } = this.state.repoPrefs;
+    return hidden.length === 0 && solo.length === 0 && !smartVisibility;
   }
 
   private headInfo(branch: ClientState['workingTreeStatus']['branch'], message: string | null, pushed: boolean): HeadInfo {
@@ -371,10 +371,13 @@ export class Store {
     await this.refreshView();
   }
 
-  /** Revisions the graph walks. Solo does not narrow them: the other references are dimmed. */
+  /**
+   * Revisions the graph walks. While anything is soloed, only the visible soloed references and
+   * the bases of soloed stashes: HEAD and the other references drop out of the graph.
+   */
   private visibleRevs(): string[] {
-    const { hidden, smartVisibility } = this.state.repoPrefs;
-    const { branches, tags, head, targetBranch } = this.state;
+    const { hidden, solo, smartVisibility } = this.state.repoPrefs;
+    const { branches, tags, head, targetBranch, stashes } = this.state;
     type RefId = { id: string; group: string | null };
     const local: RefId[] = branches.local.map(branch => ({ id: `refs/heads/${branch.name}`, group: null }));
     const remote: RefId[] = branches.remote.flatMap(group => group.branches.map(branch => ({
@@ -383,8 +386,8 @@ export class Store {
     })));
     const tagRefs: RefId[] = tags.map(tag => ({ id: `refs/tags/${tag.name}`, group: null }));
     const all = [...local, ...remote, ...tagRefs];
-    const withHead = (revs: string[]) => (head.sha ? [...revs, 'HEAD'] : revs);
 
+    let visible: RefId[];
     if (smartVisibility) {
       const ids = new Set<string>();
       const add = (name: string | null | undefined, prefix: string) => {
@@ -398,29 +401,42 @@ export class Store {
         if (targetLocal?.upstream) add(targetLocal.upstream, 'refs/remotes/');
         for (const group of branches.remote) add(`${group.remoteName}/${targetBranch}`, 'refs/remotes/');
       }
-      return withHead([...ids]);
+      visible = all.filter(ref => ids.has(ref.id));
+    } else {
+      visible = all.filter(ref => !hidden.includes(ref.id) && !(ref.group !== null && hidden.includes(ref.group)));
     }
 
-    return withHead(all.filter(ref => !hidden.includes(ref.id) && !(ref.group !== null && hidden.includes(ref.group))).map(ref => ref.id));
+    if (solo.length > 0) {
+      const soloed = visible.filter(ref => solo.includes(ref.id) || (ref.group !== null && solo.includes(ref.group)));
+      const stashBases = stashes
+        .filter(stash => solo.includes(`stash:${stash.sha}`) && !hidden.includes(`stash:${stash.sha}`))
+        .map(stash => stash.base);
+      return [...soloed.map(ref => ref.id), ...stashBases];
+    }
+    const revs = visible.map(ref => ref.id);
+    return head.sha ? [...revs, 'HEAD'] : revs;
   }
 
   async refreshGraph(): Promise<void> {
     await this.loadGraph(async () => this.visibleRevs());
   }
 
-  /** Re-derives the graph rows (lanes, stashes, solo dimming) from the loaded log. */
+  /**
+   * Re-derives the graph rows (lanes, stashes) from the loaded log. While anything is soloed,
+   * rows outside the soloed references' history (unsoloed stashes on it) are dropped.
+   */
   publishLog(): void {
     const { hidden, solo, pinned } = this.state.repoPrefs;
     const stashes = this.state.stashes.filter(stash => !hidden.includes(`stash:${stash.sha}`));
-    const rows = insertStashes(this.rawLog, stashes);
+    const withStashes = insertStashes(this.rawLog, stashes);
+    const soloed = solo.length > 0 ? reachableFrom(withStashes, this.soloTips(solo)) : null;
+    const rows = soloed ? withStashes.filter(commit => soloed.has(commit.sha)) : withStashes;
     const pinnedBranch = pinned
       .map(name => this.state.branches.local.find(branch => branch.name === name))
       .find(branch => branch !== undefined);
     const chain = pinnedBranch ? firstParentChain(this.rawLog, pinnedBranch.sha) : new Set<string>();
-    const lanes = assignLanes(rows, chain);
-    const soloed = solo.length > 0 ? reachableFrom(rows, this.soloTips(solo)) : null;
     this.setState({
-      commitLog: soloed ? lanes.map(commit => (soloed.has(commit.sha) ? commit : { ...commit, muted: true })) : lanes,
+      commitLog: assignLanes(rows, chain),
       hasMore: this.limit !== null && this.rawLog.length >= this.limit,
     });
     if (this.state.prefs.authorDisplay === 'avatars') this.computeAvatars();

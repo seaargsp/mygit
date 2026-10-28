@@ -88,6 +88,9 @@ export type ColumnPrefs = {
   widths: Partial<Record<ColumnId, number>>;
 };
 
+/** Changed-file lists: full paths, or a folder tree. */
+export type FileViewMode = 'path' | 'tree';
+
 /** Per-repository display state (workspaceState). */
 export type RepoPrefs = {
   /** Ref ids: full refnames, `remote:<name>`, `stash:<sha>`. */
@@ -102,6 +105,7 @@ export type RepoPrefs = {
   conflictIgnored: string[];
   /** Left Panel nodes collapsed: section ids, folder keys, remote node keys. */
   collapsed: string[];
+  fileView: FileViewMode;
 };
 
 export const DEFAULT_REPO_PREFS: RepoPrefs = {
@@ -114,6 +118,7 @@ export const DEFAULT_REPO_PREFS: RepoPrefs = {
   sectionsHidden: [],
   conflictIgnored: [],
   collapsed: [],
+  fileView: 'path',
 };
 
 /** Settings the webview renders with (`mygit.*`). */
@@ -325,6 +330,7 @@ export type Ops = {
   'prefs:columns': { columns: ColumnPrefs };
   'prefs:sections': { hidden: string[] };
   'prefs:collapsed': { collapsed: string[] };
+  'prefs:fileView': { mode: FileViewMode };
   'tag:create': { name: string; ref: string; message?: string };
   'tag:delete': { name: string };
   'tag:deleteRemote': { name: string; remote: string };

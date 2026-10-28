@@ -2,10 +2,10 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FileChange } from '../../git/status';
 import type { CommitDetail } from '../../git/commit';
-import type { OpenFile, SelectionView } from '../../panel/messages';
+import type { FileViewMode, OpenFile, SelectionView } from '../../panel/messages';
 import type { SplitKey, SplitProps } from '../lib/useSplit';
 import { isPending, type Ctx } from '../lib/ui';
-import { FileList, type FileViewMode } from '../components/FileList';
+import { FileList } from '../components/FileList';
 import { Icon } from '../lib/icons';
 import { avatarColor, fullDate, initials, plural, shortSha } from '../lib/format';
 import {
@@ -53,6 +53,11 @@ export function CommitPanel(props: Props) {
         </div>
       );
   }
+}
+
+/** Path / Tree mode of the file lists, stored per repository so every panel shares it. */
+function useFileViewMode(ctx: Ctx): [FileViewMode, (mode: FileViewMode) => void] {
+  return [ctx.state.repoPrefs.fileView, mode => send(ctx, 'prefs:fileView', { mode })];
 }
 
 /** Path / Tree toggle and "View all files" switch shared by the panel headers. */
@@ -115,7 +120,7 @@ function WipPanel({ ctx, splitProps, wipLabel, setWipLabel }: Props) {
   const { state } = ctx;
   const { workingTreeStatus, head, repo } = state;
   const { staged, unstaged, conflicted } = workingTreeStatus;
-  const [mode, setMode] = usePersisted<FileViewMode>('fileMode', 'path');
+  const [mode, setMode] = useFileViewMode(ctx);
   const [allFiles, setAllFiles] = useState(false);
   const operation = repo?.operation;
   const labels = operation
@@ -444,7 +449,7 @@ function Avatar({ ctx, name, email, size = 32 }: { ctx: Ctx; name: string; email
 }
 
 function CommitDetails({ ctx, splitProps, detail, isHead }: Props & { detail: CommitDetail; isHead: boolean }) {
-  const [mode, setMode] = usePersisted<FileViewMode>('fileMode', 'path');
+  const [mode, setMode] = useFileViewMode(ctx);
   const [allFiles, setAllFiles] = useState(false);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState(detail.message);
@@ -599,7 +604,7 @@ function CommitDetails({ ctx, splitProps, detail, isHead }: Props & { detail: Co
 // ------------------------------------------------------------------ stash and ranges
 
 function StashDetails({ ctx, view }: Props & { view: Extract<SelectionView, { kind: 'stash' }> }) {
-  const [mode, setMode] = usePersisted<FileViewMode>('fileMode', 'path');
+  const [mode, setMode] = useFileViewMode(ctx);
   const { stash, files } = view;
   return (
     <div class="detail">
@@ -640,7 +645,7 @@ function StashDetails({ ctx, view }: Props & { view: Extract<SelectionView, { ki
 }
 
 function RangeDetails({ ctx, view }: Props & { view: Extract<SelectionView, { kind: 'range' }> }) {
-  const [mode, setMode] = usePersisted<FileViewMode>('fileMode', 'path');
+  const [mode, setMode] = useFileViewMode(ctx);
   const to = view.to;
   const title: ComponentChildren = view.mode === 'working'
     ? <>Comparing <span class="sha">{shortSha(view.from)}</span> with the working directory</>
