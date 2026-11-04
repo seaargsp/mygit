@@ -976,7 +976,7 @@ Right-click branch → "Set Upstream" (Section 13.5).
 Section mapped from `/search/`.
 
 - Search bar in the upper right of the toolbar; focus with `⌘F / Ctrl+F`.
-- Matches commit message, SHA and author. Results update live; matching commits are highlighted in the graph and non-matches dimmed `[inferred: dimming]`; next/previous result navigation with Enter / Shift+Enter and arrow buttons, with a result count `[inferred]`.
+- Matches commit message, SHA and author. Results update live; matching commits are highlighted in the graph and non-matches dimmed `[inferred: dimming]`; next/previous result navigation with Enter / Shift+Enter and arrow buttons, with a result count `[inferred]`. A close button or Escape clears the query and restores the unfiltered graph; the button returns focus to the input.
 - Loaded commits are filtered in the webview as the query is typed. After a 400 ms pause the extension searches the history behind the graph (`git log -i -F --grep` and `--author`, plus a SHA prefix via `rev-parse`), SHAs only, capped at 1000 matches; a newer query kills the running walk. With the whole history loaded no git search runs.
 - Matches below the loaded rows are counted with the loaded ones (`+` when capped). Stepping to one extends the graph with a single `git log` sized by `rev-list --count --since=<commit date>` plus 200 rows, then selects it.
 - Command Palette search from anywhere: `⌘P / Ctrl+P`.

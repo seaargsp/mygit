@@ -30,6 +30,8 @@ type Props = {
   setTrace: (next: TraceState | null) => void;
   /** Merge finder results marked in the graph. */
   marks: Set<string> | null;
+  /** Commits left undimmed while marks are shown. */
+  markScope: Set<string> | null;
 };
 
 const OVERSCAN = 24;
@@ -94,7 +96,7 @@ function groupRefs(refs: ParsedRef[], showBranches: boolean, showTags: boolean):
   return [...groups.values()];
 }
 
-export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabel, setWipLabel, trace, setTrace, marks }: Props) {
+export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabel, setWipLabel, trace, setTrace, marks, markScope }: Props) {
   const { state, dispatch } = ctx;
   const { commitLog, selection, workingTreeStatus, head, repoPrefs, prefs } = state;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -144,6 +146,7 @@ export function GraphColumn({ ctx, search, inline, onInlineDone, reveal, wipLabe
     const commit = row === undefined ? undefined : commitLog[row - rowOffset];
     if (search.active && !search.matches.has(sha)) return true;
     if (traced && !traced.has(sha)) return true;
+    if (markScope && !markScope.has(sha)) return true;
     if (branchSet && !branchSet.has(sha)) return true;
     if (authorFilter && commit && !commit.stash && !authorFilter.includes(commit.author)) return true;
     return false;

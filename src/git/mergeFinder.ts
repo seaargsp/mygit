@@ -11,6 +11,8 @@ export type MergeResult = {
   via: string | null;
   /** Source commits this merge brought in; null for a fast-forward. */
   count: number | null;
+  /** The commits behind `count`; empty for a fast-forward. */
+  commits: string[];
 };
 
 export type MergeFinderResult = { results: MergeResult[]; unmerged: number; truncated: boolean };
@@ -47,7 +49,7 @@ export async function findMerges(repoPath: string, source: string, target: strin
   const tipA = await git(['rev-parse', '--verify', '-q', `${source}^{commit}`]);
   const unmerged = Number(await git(['rev-list', '--count', END, `${tipB}..${tipA}`]));
   const results: MergeResult[] = [];
-  const fastForward = async (sha: string): Promise<MergeResult> => ({ sha, ...(await meta(sha)), kind: 'fast-forward', via: null, count: null });
+  const fastForward = async (sha: string): Promise<MergeResult> => ({ sha, ...(await meta(sha)), kind: 'fast-forward', via: null, count: null, commits: [] });
 
   // Commits added after the last merge are not in the target: the search starts at the newest
   // source commit the target contains.
@@ -94,8 +96,8 @@ export async function findMerges(repoPath: string, source: string, target: strin
       via = viaFromSubject(info.subject);
       if (!via) via = (await git(['name-rev', '--name-only', '--no-undefined', END, merged]).catch(() => '')).replace(/[~^].*$/, '') || null;
     }
-    const count = Number(await git(['rev-list', '--count', END, x, `^${parents[0]}`]));
-    results.push({ sha: merge, ...info, kind: direct ? 'direct' : 'indirect', via, count });
+    const commits = lines(await git(['rev-list', END, x, `^${parents[0]}`]));
+    results.push({ sha: merge, ...info, kind: direct ? 'direct' : 'indirect', via, count: commits.length, commits });
     const next = await git(['merge-base', END, tipA, parents[0]]).catch(() => '');
     if (!next || next === x) return { results, unmerged, truncated: false };
     x = next;

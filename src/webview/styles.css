@@ -707,7 +707,7 @@ select.field { padding: 0 4px; }
 }
 @media (max-width: 860px) {
   .toolbar__context { display: none; }
-  .search-box { width: 160px; }
+  .search-box { width: 180px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

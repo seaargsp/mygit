@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { Ref } from 'preact';
+import type { RefObject } from 'preact';
 import type { PullMode } from '../../panel/messages';
 import { isPending, type Ctx } from '../lib/ui';
 import { Icon, type IconName } from '../lib/icons';
@@ -26,7 +26,7 @@ export type SearchProps = {
   older: number;
   index: number;
   step: (delta: 1 | -1) => void;
-  inputRef: Ref<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement>;
   /** The full-history search is running. */
   searching: boolean;
   /** The full-history search stopped at its match limit. */
@@ -189,7 +189,7 @@ export function Toolbar({ ctx, leftCollapsed, onToggleLeft, detailCollapsed, onT
   );
 }
 
-function SearchBox({ search }: { search: SearchProps }) {
+export function SearchBox({ search }: { search: SearchProps }) {
   return (
     <div class="search-box" role="search">
       <Icon name="search" size={13} />
@@ -222,6 +222,17 @@ function SearchBox({ search }: { search: SearchProps }) {
           </span>
           <button class="icon-btn icon-btn--small" aria-label="Previous result" onClick={() => search.step(-1)}><Icon name="arrowUp" size={12} /></button>
           <button class="icon-btn icon-btn--small" aria-label="Next result" onClick={() => search.step(1)}><Icon name="arrowDown" size={12} /></button>
+          <button
+            class="icon-btn icon-btn--small"
+            aria-label="Clear search"
+            title="Clear (Esc)"
+            onClick={() => {
+              search.setQuery('');
+              search.inputRef.current?.focus();
+            }}
+          >
+            <Icon name="close" size={12} />
+          </button>
         </>
       )}
     </div>

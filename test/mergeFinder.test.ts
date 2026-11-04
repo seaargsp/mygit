@@ -66,6 +66,16 @@ describe('findMerges', () => {
     expect(truncated).toBe(false);
   });
 
+  it('lists the source commits each merge brought in', async () => {
+    const { results } = await findMerges(dir, 'feat', 'main');
+    expect(results.map(entry => [...entry.commits].sort())).toEqual([[sha('feat')], [sha('feat~1'), sha('feat~2')].sort()]);
+  });
+
+  it('lists only the source commits of a merge through another branch', async () => {
+    const { results } = await findMerges(dir, 'feat2', 'main');
+    expect(results[0].commits).toEqual([sha('feat2')]);
+  });
+
   it('finds the merges of a branch that has commits after its last merge', async () => {
     git('branch', 'feat-more', 'feat');
     git('checkout', '-q', 'feat-more');

@@ -7,7 +7,7 @@ import { fullDate, plural, shortSha } from '../lib/format';
 import { useAutoFocus } from '../lib/persist';
 import { Spinner } from './Spinner';
 
-type Props = { ctx: Ctx; source: string; onClose: () => void; onMark: (label: string, shas: string[]) => void };
+type Props = { ctx: Ctx; source: string; onClose: () => void; onMark: (label: string, shas: string[], scope: Set<string>) => void };
 
 function candidates(state: Pick<ClientState, 'branches'>): string[] {
   return [
@@ -25,6 +25,11 @@ export function defaultTarget(state: Pick<ClientState, 'targetBranch' | 'branche
 export function shortBranchName(ref: string, remoteNames: string[]): string {
   const remote = remoteNames.find(name => ref.startsWith(`${name}/`));
   return remote ? ref.slice(remote.length + 1) : ref;
+}
+
+/** The commits left undimmed while marks are shown: the merges and the source commits they brought in. */
+export function markScope(results: MergeFinderResult['results']): Set<string> {
+  return new Set(results.flatMap(entry => [entry.sha, ...entry.commits]));
 }
 
 export function statusLine(source: string, target: string, result: MergeFinderResult): string {
@@ -111,7 +116,7 @@ export function MergeFinder({ ctx, source, onClose, onMark }: Props) {
         )}
 
         <div class="dialog__actions">
-          <button class="btn" disabled={!result || result.results.length === 0} onClick={() => { if (result) onMark(`Merges of ${source} into ${target}`, result.results.map(entry => entry.sha)); onClose(); }}>
+          <button class="btn" disabled={!result || result.results.length === 0} onClick={() => { if (result) onMark(`Merges of ${source} into ${target}`, result.results.map(entry => entry.sha), markScope(result.results)); onClose(); }}>
             Mark in graph
           </button>
           <button class="btn btn--primary" onClick={onClose}>Close</button>

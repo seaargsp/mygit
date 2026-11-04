@@ -142,7 +142,7 @@ Summary and description, author, committer when different, co-authors, full SHA,
 
 "Find merges of A into…" on a local or remote branch lists the merge commits on the target's first-parent line that brought in commits of A, newest first. Each result shows the date, SHA, author, subject, the number of A's commits it brought in, and whether the merge was direct or came through another branch (`via release/2.1`). A branch with commits added after its last merge still lists its earlier merges. A branch whose tip lies on the target's first-parent line is reported as a fast-forward. The dialog also states how many commits of A are not yet in the target.
 
-"Mark in graph" highlights the results and opens a strip that steps through them with Enter and Shift+Enter, loading older history when needed. Squash merges and rebases leave no ancestry link, so they produce no result; the dialog then offers to search the target's history for the branch name.
+"Mark in graph" highlights the results, dims every commit except the merges and the commits of A they brought in, and opens a strip that steps through them with Enter and Shift+Enter, loading older history when needed. Closing the strip restores the graph. Squash merges and rebases leave no ancestry link, so they produce no result; the dialog then offers to search the target's history for the branch name.
 
 ### Interactive rebase and cherry-pick
 
@@ -179,7 +179,7 @@ Summary and description, author, committer when different, co-authors, full SHA,
 
 ### Search
 
-- `Ctrl+F` searches commit messages, authors and SHAs. Loaded commits filter as the query is typed. After a short pause, the search runs over the full history, so matches older than the loaded rows are counted too. Stepping to one of them loads the graph down to it.
+- `Ctrl+F` searches commit messages, authors and SHAs. Loaded commits filter as the query is typed. After a short pause, the search runs over the full history, so matches older than the loaded rows are counted too. Stepping to one of them loads the graph down to it. The close button or `Esc` clears the search.
 - `Ctrl+Shift+H` picks a file and opens its history and blame.
 - `Ctrl+P` opens a palette with every mygit command.
 

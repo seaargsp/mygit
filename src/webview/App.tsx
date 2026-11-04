@@ -160,7 +160,7 @@ export function App() {
   const [wipLabel, setWipLabel] = useState('');
   const [trace, setTrace] = useState<TraceState | null>(null);
   const [finder, setFinder] = useState<string | null>(null);
-  const [marks, setMarks] = useState<{ label: string; shas: string[]; index: number } | null>(null);
+  const [marks, setMarks] = useState<{ label: string; shas: string[]; scope: Set<string>; index: number } | null>(null);
   const markSet = useMemo(() => (marks ? new Set(marks.shas) : null), [marks]);
   const traceRef = useRef(trace);
   traceRef.current = trace;
@@ -412,6 +412,7 @@ export function App() {
           trace={trace}
           setTrace={setTrace}
           marks={markSet}
+          markScope={marks?.scope ?? null}
         />
       );
   }
@@ -496,8 +497,8 @@ export function App() {
           ctx={ctx}
           source={finder}
           onClose={() => setFinder(null)}
-          onMark={(label, shas) => {
-            setMarks({ label, shas, index: 0 });
+          onMark={(label, shas, scope) => {
+            setMarks({ label, shas, scope, index: 0 });
             if (shas[0]) ui.showCommit(shas[0]);
           }}
         />
