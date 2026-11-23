@@ -440,6 +440,7 @@ export function remoteBranchMenu(ctx: Ctx, remote: string, branch: string): Menu
     ...rebaseSelectionItem(ctx, qualified, sha),
     sep,
     ...(sha ? [item('Create branch here', () => createBranchAt(ctx, sha))] : []),
+    ...(sha && state.head.sha ? [resetItems(ctx, sha, undefined)] : []),
     ...(state.head.branch && !state.head.upstream
       ? [item(`Set as upstream of ${state.head.branch}`, () => send(ctx, 'branch:setUpstream', { branch: state.head.branch!, remote, remoteBranch: branch }))]
       : []),
@@ -482,6 +483,7 @@ export function tagMenu(ctx: Ctx, tag: TagRef): MenuItem[] {
     item(`Rebase ${current} onto ${tag.name}`, () => rebaseConfirm(ctx, current, tag.name, () => send(ctx, 'branch:rebase', { onto: `refs/tags/${tag.name}` }))),
     item('Create branch here', () => createBranchAt(ctx, tag.sha)),
     item('Checkout this commit', () => send(ctx, 'commit:checkout', { sha: tag.sha })),
+    ...(state.head.sha ? [resetItems(ctx, tag.sha, undefined)] : []),
     ...(tag.annotated ? [] : [item('Annotate tag', () => ctx.ui.openDialog({
       title: `Annotate ${tag.name}`,
       fields: [{ kind: 'textarea', id: 'message', label: 'Message', required: true }],
